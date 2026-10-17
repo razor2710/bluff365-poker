@@ -37,7 +37,8 @@ export default class GameScene extends Phaser.Scene {
     this.sbIndex = data.sbIndex ?? (this.table ? this.table.sbIndex : null);
     this.bbIndex = data.bbIndex ?? (this.table ? this.table.bbIndex : null);
 
-    this.turnTime = data.turnTime ?? 15;
+    // 25 seconds thinking time
+    this.turnTime = data.turnTime ?? (this.table ? this.table.turnTime : 25) ?? 25;
     this.remainingTime = this.turnTime;
 
     this.playerViews = [];
@@ -47,10 +48,12 @@ export default class GameScene extends Phaser.Scene {
     this.visibleCommunityCards = 0;
 
     this.bigBlind = data.bootAmount ?? (this.table ? this.table.bootAmount : 100);
+    this.smallBlind = Math.max(1, Math.floor(this.bigBlind / 2));
     this.highestBet = data.highestBet ?? (this.table ? this.table.highestBet : this.bigBlind);
-    this.minRaiseIncrement = data.minRaiseIncrement ?? (this.table ? this.table.minRaiseIncrement : this.bigBlind);
-    this.maxPot = data.maxPot ?? 50000;
-    this.pot = data.pot ?? (this.table ? this.table.pot : Math.floor(this.bigBlind * 1.5));
+    this.minRaiseIncrement =
+      data.minRaiseIncrement ?? (this.table ? this.table.minRaiseIncrement : this.smallBlind);
+    this.maxPot = data.maxPot ?? (this.table ? this.table.maxPot : 0);
+    this.pot = data.pot ?? (this.table ? this.table.pot : this.smallBlind + this.bigBlind);
     this.currentPhase = data.phase || (this.table ? this.table.phase : "preflop");
 
     this.lastAction = null;
@@ -72,11 +75,9 @@ export default class GameScene extends Phaser.Scene {
       "";
 
     this.isRaising = false;
-    this.minRaise = 0;
-    this.maxRaise = 0;
-    this.currentRaiseAmount = 0;
-    this.selfCoinsBg = null;
-    this.selfCoinsText = null;
+    this.minRaiseTarget = 0;
+    this.maxRaiseTarget = 0;
+    this.currentRaiseTarget = 0;
   }
 
   create() {
@@ -237,9 +238,9 @@ export default class GameScene extends Phaser.Scene {
       .setAlpha(0.2);
 
     this.betInfoText = this.add
-      .text(w / 2 - 540, 60, "", {
+      .text(w / 2 - 520, 60, "", {
         fontFamily: "Arial Black",
-        fontSize: "30px",
+        fontSize: "28px",
         color: "#ffffff",
         stroke: "#000000",
         strokeThickness: 5
@@ -320,10 +321,13 @@ export default class GameScene extends Phaser.Scene {
 
       this.pot = payload.pot || 0;
       this.bigBlind = payload.bootAmount || 100;
+      this.smallBlind = Math.max(1, Math.floor(this.bigBlind / 2));
+      this.maxPot = payload.maxPot ?? this.maxPot;
       this.highestBet = payload.highestBet ?? this.bigBlind;
-      this.minRaiseIncrement = payload.minRaiseIncrement || this.bigBlind;
+      this.minRaiseIncrement = payload.minRaiseIncrement || this.smallBlind;
       this.currentPhase = payload.phase || "preflop";
-      this.remainingTime = payload.turnTime ?? 15;
+      this.turnTime = payload.turnTime ?? 25;
+      this.remainingTime = this.turnTime;
       if (this.sessionIdText) this.sessionIdText.setText(this.sessionId);
 
       this.privateHoleCards = payload.cards || [];
@@ -361,7 +365,7 @@ export default class GameScene extends Phaser.Scene {
       const prevTurnIndex = this.currentTurnIndex;
       this.pot = payload.pot ?? this.pot;
       this.highestBet = payload.highestBet ?? 0;
-      this.minRaiseIncrement = payload.minRaiseIncrement || this.bigBlind;
+      this.minRaiseIncrement = payload.minRaiseIncrement || this.smallBlind;
       this.currentPhase = payload.phase || this.currentPhase;
       this.players = payload.players || this.players;
       this.currentTurnIndex = payload.currentTurnIndex ?? 0;
@@ -467,7 +471,11 @@ export default class GameScene extends Phaser.Scene {
       this.remainingTime = 0;
       this.isRaising = false;
       this.currentPhase = "showdown";
+      if (payload.players) {
+        this.players = payload.players;
+      }
       this.updateTurnUI();
+      this.updatePlayerStatusBadges();
       this.clearTimerCircles();
 
       const commCards = payload.communityCards || [];
@@ -514,8 +522,10 @@ export default class GameScene extends Phaser.Scene {
       const mePlayer = this.players.find(p => p.username.toLowerCase() === this.username);
       if (mePlayer) {
         mePlayer.coins = payload.coins;
-        this.userData.coins = payload.coins;
-        if (this.selfCoinsText) this.selfCoinsText.setText(Number(payload.coins || 0).toLocaleString());
+        if (payload.walletCoins !== undefined) {
+          this.userData.coins = payload.walletCoins;
+        }
+        this.updatePlayerCoinsUI();
         this.updateTurnUI();
       }
     });
@@ -533,6 +543,7 @@ export default class GameScene extends Phaser.Scene {
         this.hideWaitingOverlay();
         return;
       }
+      if (payload.maxPot) this.maxPot = payload.maxPot;
       this.players = payload.seatedPlayers || [];
       this.resetTable();
       this.buildPlayersAndSeats();
@@ -555,6 +566,7 @@ export default class GameScene extends Phaser.Scene {
         this.hideWaitingOverlay();
         return;
       }
+      if (payload.maxPot) this.maxPot = payload.maxPot;
       this.players = payload.seatedPlayers || [];
       this.resetTable();
       this.buildPlayersAndSeats();
@@ -763,19 +775,19 @@ export default class GameScene extends Phaser.Scene {
         const me = this.players.find(p => p.username.toLowerCase() === this.username);
         if (!me) return;
 
-        const callAmount = Math.max(0, this.highestBet - (me.investedThisPhase || 0));
-        const increment = this.minRaiseIncrement || this.bigBlind;
-        this.minRaise = callAmount + increment;
-        this.maxRaise = me.coins;
+        const myInvested = me.investedThisPhase || 0;
+        const step = Math.max(1, this.minRaiseIncrement || this.smallBlind);
+        this.minRaiseTarget = this.highestBet + step;
+        this.maxRaiseTarget = myInvested + me.coins;
 
-        if (this.maxRaise <= this.minRaise) {
+        if (this.maxRaiseTarget <= this.minRaiseTarget) {
           if (this.sndChaal) this.sndChaal.play();
           const pv = this.playerViews.find(p => p.username.toLowerCase() === this.username);
           if (pv) this.animateBetToDealer(pv.seat.x, pv.seat.y);
           this.sendAction("all_in");
         } else {
           this.isRaising = true;
-          this.setSliderAmount(this.minRaise);
+          this.setSliderTargetBet(this.minRaiseTarget);
           this.updateTurnUI();
         }
       }
@@ -832,7 +844,7 @@ export default class GameScene extends Phaser.Scene {
     this.raiseContainer.add(this.raiseThumb);
 
     this.raiseAmountTextUI = this.add
-      .text(0, -68, "RAISE: 0", {
+      .text(0, -68, "RAISE TO: 0", {
         fontFamily: "Impact, Arial Black",
         fontSize: "30px",
         color: "#ffffff",
@@ -844,26 +856,18 @@ export default class GameScene extends Phaser.Scene {
     this.raiseContainer.add(this.raiseAmountTextUI);
 
     const presets = [
-      { label: "MIN", x: -220, getAmt: () => this.minRaise },
+      { label: "MIN", x: -220, getTarget: () => this.minRaiseTarget },
       {
         label: "1/2 POT",
         x: -75,
-        getAmt: () => {
-          const me = this.players.find(p => p.username.toLowerCase() === this.username);
-          const callAmt = me ? Math.max(0, this.highestBet - (me.investedThisPhase || 0)) : 0;
-          return callAmt + Math.floor(this.pot * 0.5);
-        }
+        getTarget: () => this.highestBet + Math.max(this.smallBlind, Math.floor(this.pot * 0.5))
       },
       {
         label: "POT",
         x: 75,
-        getAmt: () => {
-          const me = this.players.find(p => p.username.toLowerCase() === this.username);
-          const callAmt = me ? Math.max(0, this.highestBet - (me.investedThisPhase || 0)) : 0;
-          return callAmt + this.pot;
-        }
+        getTarget: () => this.highestBet + Math.max(this.bigBlind, this.pot)
       },
-      { label: "MAX", x: 220, getAmt: () => this.maxRaise }
+      { label: "MAX", x: 220, getTarget: () => this.maxRaiseTarget }
     ];
 
     presets.forEach(pr => {
@@ -883,7 +887,7 @@ export default class GameScene extends Phaser.Scene {
         .setInteractive({ useHandCursor: true })
         .on("pointerdown", () => {
           if (this.sndClick) this.sndClick.play();
-          this.setSliderAmount(pr.getAmt());
+          this.setSliderTargetBet(pr.getTarget());
         });
       this.raiseContainer.add([pBg, pTxt, pZone]);
     });
@@ -925,8 +929,8 @@ export default class GameScene extends Phaser.Scene {
       const maxX = trackW / 2;
       const clampedX = Phaser.Math.Clamp(dragX, minX, maxX);
       const percent = (clampedX - minX) / (maxX - minX);
-      const rawAmt = this.minRaise + percent * (this.maxRaise - this.minRaise);
-      this.setSliderAmount(rawAmt);
+      const rawTarget = this.minRaiseTarget + percent * (this.maxRaiseTarget - this.minRaiseTarget);
+      this.setSliderTargetBet(rawTarget);
     });
 
     cancelZone.on("pointerdown", () => {
@@ -937,38 +941,300 @@ export default class GameScene extends Phaser.Scene {
 
     confirmZone.on("pointerdown", () => {
       if (this.sndChaal) this.sndChaal.play();
+      const me = this.players.find(p => p.username.toLowerCase() === this.username);
+      const myInvested = me ? me.investedThisPhase || 0 : 0;
+      const chipsToInvestNow = Math.max(0, this.currentRaiseTarget - myInvested);
+
       const pv = this.playerViews.find(p => p.username.toLowerCase() === this.username);
       if (pv) this.animateBetToDealer(pv.seat.x, pv.seat.y);
 
-      const act = this.currentRaiseAmount >= this.maxRaise ? "all_in" : "raise";
-      this.sendAction(act, { amount: this.currentRaiseAmount });
+      const act = this.currentRaiseTarget >= this.maxRaiseTarget ? "all_in" : "raise";
+      this.sendAction(act, { amount: chipsToInvestNow, targetBet: this.currentRaiseTarget });
 
       this.isRaising = false;
       this.updateTurnUI();
     });
   }
 
-  setSliderAmount(targetAmount) {
+  setSliderTargetBet(targetBetAmount) {
     const minX = -this.sliderTrackW / 2;
     const maxX = this.sliderTrackW / 2;
+    const snapUnit = Math.max(1, this.smallBlind || Math.floor(this.bigBlind / 2) || 5);
 
-    let snapped = Math.round(targetAmount / this.bigBlind) * this.bigBlind;
-    if (targetAmount >= this.maxRaise) snapped = this.maxRaise;
-    this.currentRaiseAmount = Phaser.Math.Clamp(snapped, this.minRaise, this.maxRaise);
+    let snapped = Math.round(targetBetAmount / snapUnit) * snapUnit;
+    if (targetBetAmount >= this.maxRaiseTarget) snapped = this.maxRaiseTarget;
+    this.currentRaiseTarget = Phaser.Math.Clamp(snapped, this.minRaiseTarget, this.maxRaiseTarget);
 
     const snappedPercent =
-      this.maxRaise <= this.minRaise
+      this.maxRaiseTarget <= this.minRaiseTarget
         ? 1
-        : (this.currentRaiseAmount - this.minRaise) / (this.maxRaise - this.minRaise);
+        : (this.currentRaiseTarget - this.minRaiseTarget) / (this.maxRaiseTarget - this.minRaiseTarget);
 
     this.raiseThumb.x = minX + snappedPercent * (maxX - minX);
-    const labelPrefix = this.currentRaiseAmount >= this.maxRaise ? "ALL-IN: " : "RAISE TO: ";
-    this.raiseAmountTextUI.setText(labelPrefix + this.currentRaiseAmount.toLocaleString());
+    const labelPrefix =
+      this.currentRaiseTarget >= this.maxRaiseTarget
+        ? "ALL-IN: "
+        : this.highestBet === 0
+        ? "BET: "
+        : "RAISE TO: ";
+    this.raiseAmountTextUI.setText(labelPrefix + this.currentRaiseTarget.toLocaleString());
 
     this.raiseFill.clear();
     this.raiseFill.fillStyle(0xff0033, 1);
     const fillW = Math.max(10, this.raiseThumb.x - minX);
     this.raiseFill.fillRoundedRect(minX, -this.sliderTrackH / 2, fillW, this.sliderTrackH, 7);
+  }
+
+  createBalanceBadge(x, y, width, height, angle, initialCoins) {
+    const container = this.add.container(x, y).setAngle(angle || 0).setDepth(95);
+
+    const pill = this.add.graphics();
+    pill.fillStyle(0x050505, 0.9);
+    pill.fillRoundedRect(-width / 2, -height / 2, width, height, height / 2);
+    pill.lineStyle(2, 0xffcc00, 0.9);
+    pill.strokeRoundedRect(-width / 2, -height / 2, width, height, height / 2);
+
+    const coinIcon = this.add.circle(-width / 2 + 14, 0, 6, 0xffcc00);
+    const text = this.add
+      .text(6, 0, Number(initialCoins || 0).toLocaleString(), {
+        fontFamily: "Arial Black",
+        fontSize: "14px",
+        color: "#ffd700",
+        stroke: "#000000",
+        strokeThickness: 3
+      })
+      .setOrigin(0.5);
+
+    container.add([pill, coinIcon, text]);
+    container.textObj = text;
+    return container;
+  }
+
+  buildPlayersAndSeats() {
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const seatPositions = [
+      { x: w * 0.5, y: h * 0.72, inward: -90, textAngle: 0 },
+      { x: w * 0.25, y: h * 0.6, inward: -35, textAngle: 55 },
+      { x: w * 0.255, y: h * 0.36, inward: 35, textAngle: -55 },
+      { x: w * 0.755, y: h * 0.36, inward: 145, textAngle: 55 },
+      { x: w * 0.76, y: h * 0.6, inward: -145, textAngle: -55 }
+    ];
+
+    let selfPlayer = null;
+    const otherPlayers = [];
+    const youIndex = this.players.findIndex(p => p.username.toLowerCase() === this.username.toLowerCase());
+
+    for (let i = 0; i < this.players.length; i++) {
+      const offsetIdx = youIndex !== -1 ? (i - youIndex + this.players.length) % this.players.length : i;
+      if (offsetIdx === 0 && youIndex !== -1) selfPlayer = this.players[i];
+      else otherPlayers.push({ player: this.players[i], visualIdx: offsetIdx });
+    }
+
+    if (selfPlayer) {
+      const avatarSize = 88;
+      const myKey = `avatar_${selfPlayer.username.toLowerCase().trim()}`;
+      const avatar = this.add
+        .image(seatPositions[0].x, seatPositions[0].y, this.textures.exists(myKey) ? myKey : "avatar")
+        .setDisplaySize(avatarSize, avatarSize);
+
+      const rawSelfCoins =
+        selfPlayer.coins !== undefined && selfPlayer.coins > 0
+          ? selfPlayer.coins
+          : this.maxPot > 0
+          ? Math.min(Number(this.userData.coins || 0), this.maxPot)
+          : Number(this.userData.coins || 0);
+
+      // 1. Balance Pill placed below avatar, outside loading circle
+      const coinsBadge = this.createBalanceBadge(
+        seatPositions[0].x,
+        seatPositions[0].y + 70,
+        134,
+        26,
+        0,
+        rawSelfCoins
+      );
+      this.selfCoinsText = coinsBadge.textObj;
+
+      // 2. Name Text placed below Balance Pill
+      const nameText = this.add
+        .text(seatPositions[0].x, seatPositions[0].y + 104, selfPlayer.username, {
+          fontFamily: "Arial Black",
+          fontSize: "21px",
+          color: "#ffffff",
+          stroke: "#000000",
+          strokeThickness: 5
+        })
+        .setOrigin(0.5)
+        .setShadow(0, 3, "#000000", 6, true, true);
+
+      const pv = {
+        playerId: selfPlayer.id,
+        username: selfPlayer.username,
+        seatIndex: selfPlayer.seatIndex,
+        label: nameText,
+        coinsBadge,
+        coinsText: coinsBadge.textObj,
+        seat: seatPositions[0],
+        avatar,
+        timerGraphics: this.add.graphics(),
+        statusBadge: null,
+        roleBadge: null,
+        cardSprites: []
+      };
+      this.playerViews.push(pv);
+
+      for (let i = 0; i < 2; i++) {
+        const card = this.add
+          .image(seatPositions[0].x + (i === 0 ? -24 : 24), seatPositions[0].y - 122, "card_back")
+          .setScale(0.7)
+          .setAngle(i === 0 ? -8 : 8)
+          .setAlpha(0);
+        card.baseWidth = card.displayWidth;
+        card.baseAngle = card.angle;
+        card.baseScaleX = card.scaleX;
+        card.baseScaleY = card.scaleY;
+        this.userCards.push(card);
+      }
+      pv.cardSprites = this.userCards;
+    }
+
+    for (let i = 0; i < otherPlayers.length; i++) {
+      const p = otherPlayers[i].player;
+      const pos = seatPositions[otherPlayers[i].visualIdx];
+      if (!pos) continue;
+
+      const avatarSize = 74;
+      const inwardRad = Phaser.Math.DegToRad(pos.inward);
+      const outwardRad = inwardRad + Math.PI;
+      const elementRotation = pos.inward + 90;
+
+      const opponentKey = `avatar_${p.username.toLowerCase().trim()}`;
+      const avatar = this.add
+        .image(pos.x, pos.y, this.textures.exists(opponentKey) ? opponentKey : "avatar")
+        .setDisplaySize(avatarSize, avatarSize)
+        .setAngle(elementRotation);
+
+      // 1. Balance Pill placed below avatar, outside loading circle
+      const coinsDist = 64;
+      const oppCoins =
+        p.coins !== undefined && p.coins > 0
+          ? p.coins
+          : this.maxPot > 0
+          ? this.maxPot
+          : this.bigBlind * 50;
+      const coinsBadge = this.createBalanceBadge(
+        pos.x + coinsDist * Math.cos(outwardRad),
+        pos.y + coinsDist * Math.sin(outwardRad),
+        118,
+        24,
+        pos.textAngle,
+        oppCoins
+      );
+
+      // 2. Name Text placed below Balance Pill
+      const nameDist = 94;
+      const nameText = this.add
+        .text(
+          pos.x + nameDist * Math.cos(outwardRad),
+          pos.y + nameDist * Math.sin(outwardRad),
+          p.username,
+          {
+            fontFamily: "Arial Black",
+            fontSize: "19px",
+            color: "#ffffff",
+            stroke: "#000000",
+            strokeThickness: 5
+          }
+        )
+        .setOrigin(0.5)
+        .setAngle(pos.textAngle)
+        .setShadow(0, 3, "#000000", 5, true, true);
+
+      const pv = {
+        playerId: p.id,
+        username: p.username,
+        seatIndex: p.seatIndex,
+        label: nameText,
+        coinsBadge,
+        coinsText: coinsBadge.textObj,
+        seat: pos,
+        avatar,
+        timerGraphics: this.add.graphics(),
+        statusBadge: null,
+        roleBadge: null,
+        cardSprites: []
+      };
+      this.playerViews.push(pv);
+
+      const cardBaseX = pos.x + 90 * Math.cos(inwardRad);
+      const cardBaseY = pos.y + 90 * Math.sin(inwardRad);
+      const playerCards = [];
+
+      for (let c = 0; c < 2; c++) {
+        const dist = c === 0 ? -12 : 12;
+        const card = this.add
+          .image(
+            cardBaseX + dist * Math.cos(inwardRad + Math.PI / 2),
+            cardBaseY + dist * Math.sin(inwardRad + Math.PI / 2),
+            "card_back"
+          )
+          .setScale(0.4)
+          .setAlpha(0)
+          .setAngle(elementRotation + (c === 0 ? -10 : 10));
+        card.baseWidth = card.displayWidth;
+        card.baseAngle = card.angle;
+        card.baseScaleX = card.scaleX;
+        card.baseScaleY = card.scaleY;
+        playerCards.push(card);
+      }
+      this.otherPlayerCards.push(playerCards);
+      pv.cardSprites = playerCards;
+    }
+  }
+
+  updatePlayerCoinsUI() {
+    if (!this.players || !this.playerViews) return;
+    this.playerViews.forEach(pv => {
+      const player = this.players.find(
+        p => p.id === pv.playerId || p.username.toLowerCase() === pv.username.toLowerCase()
+      );
+      if (player && player.coins !== undefined && pv.coinsText) {
+        pv.coinsText.setText(Number(player.coins).toLocaleString());
+      }
+    });
+  }
+
+  resetTable() {
+    this.playerViews.forEach(pv => {
+      if (pv.avatar) pv.avatar.destroy();
+      if (pv.label) pv.label.destroy();
+      if (pv.coinsBadge) pv.coinsBadge.destroy();
+      if (pv.timerGraphics) pv.timerGraphics.destroy();
+      if (pv.statusBadge) pv.statusBadge.destroy();
+      if (pv.roleBadge) pv.roleBadge.destroy();
+    });
+    this.userCards.forEach(c => c.destroy());
+    this.otherPlayerCards.flat().forEach(c => c.destroy());
+
+    this.communitySprites.forEach(slot => {
+      slot.container.setAlpha(0);
+      slot.card.setTexture("card_back");
+      slot.border.setTexture("card_back");
+      slot.container.setPosition(slot.targetX, slot.targetY);
+    });
+
+    this.selfCoinsText = null;
+    this.playerViews = [];
+    this.userCards = [];
+    this.otherPlayerCards = [];
+    this.visibleCommunityCards = 0;
+    this.roundFinished = false;
+    this.dealingDone = false;
+    this.isRaising = false;
+
+    this.hideCyberWinnerDialog(true);
+    this.hideWaitingOverlay();
   }
 
   showExitConfirmDialog() {
@@ -1144,203 +1410,6 @@ export default class GameScene extends Phaser.Scene {
         });
       }
     });
-  }
-
-  buildPlayersAndSeats() {
-    const w = this.scale.width;
-    const h = this.scale.height;
-    const seatPositions = [
-      { x: w * 0.5, y: h * 0.735, inward: -90, textAngle: 0 },
-      { x: w * 0.25, y: h * 0.6, inward: -35, textAngle: 55 },
-      { x: w * 0.255, y: h * 0.36, inward: 35, textAngle: -55 },
-      { x: w * 0.755, y: h * 0.36, inward: 145, textAngle: 55 },
-      { x: w * 0.76, y: h * 0.6, inward: -145, textAngle: -55 }
-    ];
-
-    let selfPlayer = null;
-    const otherPlayers = [];
-    const youIndex = this.players.findIndex(p => p.username.toLowerCase() === this.username.toLowerCase());
-
-    for (let i = 0; i < this.players.length; i++) {
-      const offsetIdx = youIndex !== -1 ? (i - youIndex + this.players.length) % this.players.length : i;
-      if (offsetIdx === 0 && youIndex !== -1) selfPlayer = this.players[i];
-      else otherPlayers.push({ player: this.players[i], visualIdx: offsetIdx });
-    }
-
-    if (selfPlayer) {
-      const avatarSize = 90;
-      const myKey = `avatar_${selfPlayer.username.toLowerCase().trim()}`;
-      const avatar = this.add
-        .image(seatPositions[0].x, seatPositions[0].y, this.textures.exists(myKey) ? myKey : "avatar")
-        .setDisplaySize(avatarSize, avatarSize);
-
-      const nameText = this.add
-        .text(seatPositions[0].x, seatPositions[0].y + avatarSize * 0.7, selfPlayer.username, {
-          fontFamily: "Arial Black",
-          fontSize: "24px",
-          color: "#ffffff",
-          stroke: "#000000",
-          strokeThickness: 5
-        })
-        .setOrigin(0.5)
-        .setShadow(0, 3, "#000000", 6, true, true);
-
-      const pv = {
-        playerId: selfPlayer.id,
-        username: selfPlayer.username,
-        seatIndex: selfPlayer.seatIndex,
-        label: nameText,
-        seat: seatPositions[0],
-        avatar,
-        timerGraphics: this.add.graphics(),
-        statusBadge: null,
-        betBadge: null,
-        roleBadge: null,
-        cardSprites: []
-      };
-      this.playerViews.push(pv);
-
-      for (let i = 0; i < 2; i++) {
-        const card = this.add
-          .image(seatPositions[0].x + (i === 0 ? -24 : 24), seatPositions[0].y - 120, "card_back")
-          .setScale(0.7)
-          .setAngle(i === 0 ? -8 : 8)
-          .setAlpha(0);
-        card.baseWidth = card.displayWidth;
-        card.baseAngle = card.angle;
-        card.baseScaleX = card.scaleX;
-        card.baseScaleY = card.scaleY;
-        this.userCards.push(card);
-      }
-      pv.cardSprites = this.userCards;
-
-      const coinsAmt = selfPlayer.coins !== undefined ? selfPlayer.coins : this.userData.coins;
-      this.selfCoinsBg = this.add
-        .image(seatPositions[0].x, seatPositions[0].y + avatarSize * 1.2, "top_coins")
-        .setDisplaySize(280, 50);
-      this.selfCoinsText = this.add
-        .text(seatPositions[0].x - 65, seatPositions[0].y + avatarSize * 1.2, Number(coinsAmt || 0).toLocaleString(), {
-          fontFamily: "Arial Black",
-          fontSize: "18px",
-          color: "#ffffff",
-          stroke: "#000000",
-          strokeThickness: 3
-        })
-        .setOrigin(0, 0.5);
-    }
-
-    for (let i = 0; i < otherPlayers.length; i++) {
-      const p = otherPlayers[i].player;
-      const pos = seatPositions[otherPlayers[i].visualIdx];
-      if (!pos) continue;
-
-      const avatarSize = 75;
-      const inwardRad = Phaser.Math.DegToRad(pos.inward);
-      const elementRotation = pos.inward + 90;
-
-      const opponentKey = `avatar_${p.username.toLowerCase().trim()}`;
-      const avatar = this.add
-        .image(pos.x, pos.y, this.textures.exists(opponentKey) ? opponentKey : "avatar")
-        .setDisplaySize(avatarSize, avatarSize)
-        .setAngle(elementRotation);
-
-      const nameDist = avatarSize * 0.75;
-      const nameText = this.add
-        .text(
-          pos.x + nameDist * Math.cos(inwardRad + Math.PI),
-          pos.y + nameDist * Math.sin(inwardRad + Math.PI),
-          p.username,
-          {
-            fontFamily: "Arial Black",
-            fontSize: "20px",
-            color: "#ffffff",
-            stroke: "#000000",
-            strokeThickness: 5
-          }
-        )
-        .setOrigin(0.5)
-        .setAngle(pos.textAngle)
-        .setShadow(0, 3, "#000000", 5, true, true);
-
-      const pv = {
-        playerId: p.id,
-        username: p.username,
-        seatIndex: p.seatIndex,
-        label: nameText,
-        seat: pos,
-        avatar,
-        timerGraphics: this.add.graphics(),
-        statusBadge: null,
-        betBadge: null,
-        roleBadge: null,
-        cardSprites: []
-      };
-      this.playerViews.push(pv);
-
-      const cardBaseX = pos.x + 90 * Math.cos(inwardRad);
-      const cardBaseY = pos.y + 90 * Math.sin(inwardRad);
-      const playerCards = [];
-
-      for (let c = 0; c < 2; c++) {
-        const dist = c === 0 ? -12 : 12;
-        const card = this.add
-          .image(
-            cardBaseX + dist * Math.cos(inwardRad + Math.PI / 2),
-            cardBaseY + dist * Math.sin(inwardRad + Math.PI / 2),
-            "card_back"
-          )
-          .setScale(0.4)
-          .setAlpha(0)
-          .setAngle(elementRotation + (c === 0 ? -10 : 10));
-        card.baseWidth = card.displayWidth;
-        card.baseAngle = card.angle;
-        card.baseScaleX = card.scaleX;
-        card.baseScaleY = card.scaleY;
-        playerCards.push(card);
-      }
-      this.otherPlayerCards.push(playerCards);
-      pv.cardSprites = playerCards;
-    }
-  }
-
-  resetTable() {
-    this.playerViews.forEach(pv => {
-      if (pv.avatar) pv.avatar.destroy();
-      if (pv.label) pv.label.destroy();
-      if (pv.timerGraphics) pv.timerGraphics.destroy();
-      if (pv.statusBadge) pv.statusBadge.destroy();
-      if (pv.betBadge) pv.betBadge.destroy();
-      if (pv.roleBadge) pv.roleBadge.destroy();
-    });
-    this.userCards.forEach(c => c.destroy());
-    this.otherPlayerCards.flat().forEach(c => c.destroy());
-
-    this.communitySprites.forEach(slot => {
-      slot.container.setAlpha(0);
-      slot.card.setTexture("card_back");
-      slot.border.setTexture("card_back");
-      slot.container.setPosition(slot.targetX, slot.targetY);
-    });
-
-    if (this.selfCoinsBg) {
-      this.selfCoinsBg.destroy();
-      this.selfCoinsBg = null;
-    }
-    if (this.selfCoinsText) {
-      this.selfCoinsText.destroy();
-      this.selfCoinsText = null;
-    }
-
-    this.playerViews = [];
-    this.userCards = [];
-    this.otherPlayerCards = [];
-    this.visibleCommunityCards = 0;
-    this.roundFinished = false;
-    this.dealingDone = false;
-    this.isRaising = false;
-
-    this.hideCyberWinnerDialog(true);
-    this.hideWaitingOverlay();
   }
 
   showCyberWinnerDialog(titleText, bodyHtml, onCompleteCallback) {
@@ -1594,9 +1663,8 @@ export default class GameScene extends Phaser.Scene {
     const blindViews = this.playerViews.filter(
       pv => pv.seatIndex === this.sbIndex || pv.seatIndex === this.bbIndex
     );
-    const targets = blindViews.length > 0 ? blindViews : this.playerViews;
-    targets.forEach((pv, index) => {
-      this.time.delayedCall(index * 150, () => {
+    blindViews.forEach((pv, index) => {
+      this.time.delayedCall(index * 160, () => {
         this.animateBetToDealer(pv.seat.x, pv.seat.y);
       });
     });
@@ -1709,8 +1777,11 @@ export default class GameScene extends Phaser.Scene {
       this.isRaising = false;
     }
 
+    this.updatePlayerCoinsUI();
+
     if (this.pot !== undefined && this.betInfoText) {
-      this.betInfoText.setText(`POT: ${Number(this.pot || 0).toLocaleString()}`);
+      const betStr = this.highestBet > 0 ? `  |  BET: ${Number(this.highestBet).toLocaleString()}` : "";
+      this.betInfoText.setText(`POT: ${Number(this.pot || 0).toLocaleString()}${betStr}`);
     }
     if (this.phaseInfoText) {
       const phaseLabel = this.sessionId && this.dealingDone ? (this.currentPhase || "PREFLOP").toUpperCase() : "";
@@ -1736,10 +1807,6 @@ export default class GameScene extends Phaser.Scene {
 
     const me = this.players.find(p => p.username.toLowerCase() === this.username);
     if (!me) return;
-
-    if (this.selfCoinsText && me.coins !== undefined) {
-      this.selfCoinsText.setText(Number(me.coins).toLocaleString());
-    }
 
     this.players.forEach(p => {
       const pv = this.playerViews.find(v => v.username.toLowerCase() === p.username.toLowerCase());
@@ -1773,9 +1840,11 @@ export default class GameScene extends Phaser.Scene {
     this.raiseContainer.setVisible(false);
     buttons.forEach(btn => btn.setVisible(true));
 
-    const callAmount = Math.max(0, this.highestBet - (me.investedThisPhase || 0));
-    const increment = this.minRaiseIncrement || this.bigBlind;
-    const minRaiseCost = callAmount + increment;
+    const myInvested = me.investedThisPhase || 0;
+    const callAmount = Math.max(0, this.highestBet - myInvested);
+    const step = Math.max(1, this.minRaiseIncrement || this.smallBlind);
+    const minRaiseTo = this.highestBet + step;
+    const minRaiseAdditional = callAmount + step;
 
     // 1. FOLD
     this.foldBtn.setLabel("FOLD");
@@ -1799,8 +1868,8 @@ export default class GameScene extends Phaser.Scene {
 
     // 3. RAISE / BET
     const raiseVerb = this.highestBet === 0 ? "BET" : "RAISE";
-    if (me.coins >= minRaiseCost) {
-      this.raiseBtn.setLabel(`${raiseVerb} ${minRaiseCost.toLocaleString()}`);
+    if (me.coins >= minRaiseAdditional) {
+      this.raiseBtn.setLabel(`${raiseVerb} ${minRaiseTo.toLocaleString()}`);
       this.raiseBtn.setButtonEnabled(isUserTurn);
     } else {
       this.raiseBtn.setLabel(raiseVerb);
@@ -1819,7 +1888,7 @@ export default class GameScene extends Phaser.Scene {
       this.clearTimerCircles();
       return;
     }
-    const total = this.turnTime || 15;
+    const total = this.turnTime || 25;
     const remaining = this.remainingTime;
 
     this.playerViews.forEach(pv => {
@@ -1873,7 +1942,8 @@ export default class GameScene extends Phaser.Scene {
         badgeColor = "#00ff88";
       }
 
-      const inwardRad = Phaser.Math.DegToRad(pv.seat.inward ?? -90);
+      // Restored inside the player's avatar (away from the cards, timer circle, and balance pill)
+      const inwardRad = Phaser.Math.DegToRad(pv.seat.inward ?? -100);
       const distance = pv.avatar.displayHeight / 2 - 10;
       const badgeX = pv.seat.x + distance * Math.cos(inwardRad + Math.PI);
       const badgeY = pv.seat.y + distance * Math.sin(inwardRad + Math.PI);
@@ -1887,7 +1957,7 @@ export default class GameScene extends Phaser.Scene {
         pv.statusBadge = this.add
           .text(badgeX, badgeY, labelText, {
             fontFamily: "Arial Black",
-            fontSize: "14px",
+            fontSize: "13px",
             color: badgeColor,
             stroke: "#000000",
             strokeThickness: 3
@@ -1906,18 +1976,20 @@ export default class GameScene extends Phaser.Scene {
       // Dynamic Dealer (D), Small Blind (SB), and Big Blind (BB) Badges
       let roleText = "";
       if (this.dealingDone && !this.roundFinished) {
-        if (seatIdx === this.sbIndex && seatIdx === this.dealerIndex) {
+        if (seatIdx === this.dealerIndex && seatIdx === this.bbIndex) {
+          roleText = "D / BB";
+        } else if (seatIdx === this.dealerIndex && seatIdx === this.sbIndex) {
           roleText = "D / SB";
+        } else if (seatIdx === this.dealerIndex) {
+          roleText = "D";
         } else if (seatIdx === this.sbIndex) {
           roleText = "SB";
         } else if (seatIdx === this.bbIndex) {
           roleText = "BB";
-        } else if (seatIdx === this.dealerIndex) {
-          roleText = "D";
         }
       }
-      const roleX = pv.seat.x + (pv.avatar.displayWidth / 2) * 0.85;
-      const roleY = pv.seat.y - (pv.avatar.displayHeight / 2) * 0.85;
+      const roleX = pv.seat.x + (pv.avatar.displayWidth / 2) * 0.88;
+      const roleY = pv.seat.y - (pv.avatar.displayHeight / 2) * 0.88;
 
       if (!roleText) {
         if (pv.roleBadge) {
@@ -1931,7 +2003,7 @@ export default class GameScene extends Phaser.Scene {
             fontSize: "13px",
             color: "#050505",
             backgroundColor: "#ffcc00",
-            padding: { x: 5, y: 2 }
+            padding: { x: 6, y: 2 }
           })
           .setOrigin(0.5)
           .setDepth(101);
