@@ -629,67 +629,233 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ==========================================
-  // PROCEDURAL NORMAL ACTION BUTTON BUILDER
+  // SUPER-ANIMATIVE LUXURY CYBER ACTION BUTTON
   // ==========================================
   createActionButton(x, y, width, height, label, fillHex, strokeHex, textColor, onClick) {
     const container = this.add.container(x, y).setDepth(1500);
+    container.baseX = x;
+    container.baseY = y;
 
+    // 1. Breathing Outer Neon Halo
+    const aura = this.add.graphics();
+    aura.fillStyle(strokeHex, 0.22);
+    aura.fillRoundedRect(-width / 2 - 8, -height / 2 - 8, width + 16, height + 16, 22);
+    aura.setAlpha(0);
+
+    // 2. Multi-Layered Luxury Beveled Body
     const bg = this.add.graphics();
-    const drawBg = (fill, stroke, fillAlpha = 0.95) => {
+    const drawBg = (isHovered = false, isPressed = false) => {
       bg.clear();
-      bg.fillStyle(fill, fillAlpha);
-      bg.fillRoundedRect(-width / 2, -height / 2, width, height, 14);
-      bg.lineStyle(3, stroke, 1);
-      bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 14);
-    };
-    drawBg(fillHex, strokeHex);
 
+      // Drop shadow
+      bg.fillStyle(0x000000, 0.65);
+      bg.fillRoundedRect(-width / 2, -height / 2 + 5, width, height, 16);
+
+      // Deep Obsidian Base
+      bg.fillStyle(0x060609, 0.96);
+      bg.fillRoundedRect(-width / 2, -height / 2, width, height, 16);
+
+      // Colored Inner Core Tint
+      bg.fillStyle(fillHex, isHovered ? 0.95 : 0.78);
+      bg.fillRoundedRect(-width / 2 + 3, -height / 2 + 3, width - 6, height - 6, 14);
+
+      // Top Glass Specular Highlight
+      bg.fillStyle(0xffffff, isHovered ? 0.18 : 0.09);
+      bg.fillRoundedRect(-width / 2 + 6, -height / 2 + 4, width - 12, height * 0.42, {
+        tl: 11,
+        tr: 11,
+        bl: 3,
+        br: 3
+      });
+
+      // Bottom Neon Status Accent Pill
+      bg.fillStyle(strokeHex, isHovered ? 1 : 0.8);
+      bg.fillRoundedRect(-width * 0.26, height / 2 - 7, width * 0.52, 4, 2);
+
+      // Outer Neon Border
+      bg.lineStyle(isHovered ? 3.5 : 2.5, isPressed ? 0xffffff : strokeHex, 1);
+      bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
+
+      // Inner Gold/Cyber Rim
+      bg.lineStyle(1, 0xffffff, isHovered ? 0.45 : 0.16);
+      bg.strokeRoundedRect(-width / 2 + 4, -height / 2 + 4, width - 8, height - 8, 12);
+
+      // Cyber Corner Brackets
+      const cLen = 12;
+      const r = width / 2 - 3;
+      const b = height / 2 - 3;
+      bg.lineStyle(2, 0xffffff, isHovered ? 0.85 : 0.35);
+      // Top-left bracket
+      bg.beginPath();
+      bg.moveTo(-r, -b + cLen);
+      bg.lineTo(-r, -b);
+      bg.lineTo(-r + cLen, -b);
+      bg.strokePath();
+      // Bottom-right bracket
+      bg.beginPath();
+      bg.moveTo(r, b - cLen);
+      bg.lineTo(r, b);
+      bg.lineTo(r - cLen, b);
+      bg.strokePath();
+    };
+    drawBg(false, false);
+
+    // 3. Shimmer Light Sweep Bar
+    const shimmer = this.add.graphics();
+    shimmer.fillStyle(0xffffff, 0.28);
+    shimmer.fillRect(-14, -height / 2 + 4, 28, height - 8);
+    shimmer.setAngle(18);
+    shimmer.x = -width / 2 - 30;
+    shimmer.setAlpha(0);
+
+    // 4. Crisp Label Text
     const textObj = this.add
-      .text(0, 0, label, {
+      .text(0, -2, label, {
         fontFamily: "Impact, Arial Black",
         fontSize: "24px",
         color: textColor,
-        letterSpacing: 1.5,
+        letterSpacing: 1.8,
         stroke: "#000000",
-        strokeThickness: 4,
+        strokeThickness: 5,
         align: "center"
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setShadow(0, 2, "#000000", 6, true, true);
 
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5);
 
+    const triggerShimmerSweep = () => {
+      this.tweens.killTweensOf(shimmer);
+      shimmer.x = -width / 2 - 25;
+      shimmer.setAlpha(0.75);
+      this.tweens.add({
+        targets: shimmer,
+        x: width / 2 + 25,
+        alpha: 0,
+        duration: 420,
+        ease: "Cubic.easeOut"
+      });
+    };
+
     hitZone.on("pointerover", () => {
       if (!container.isEnabled) return;
-      container.setScale(1.05);
-      drawBg(strokeHex, 0xffffff, 0.28);
+      drawBg(true, false);
+      triggerShimmerSweep();
+      this.tweens.killTweensOf(container);
+      this.tweens.add({
+        targets: container,
+        scaleX: 1.07,
+        scaleY: 1.07,
+        y: container.baseY - 7,
+        duration: 180,
+        ease: "Back.easeOut"
+      });
+      this.tweens.add({
+        targets: textObj,
+        scaleX: 1.04,
+        scaleY: 1.04,
+        duration: 160,
+        ease: "Sine.easeOut"
+      });
     });
 
     hitZone.on("pointerout", () => {
-      container.setScale(1);
-      drawBg(fillHex, strokeHex);
+      drawBg(false, false);
+      this.tweens.killTweensOf(container);
+      this.tweens.add({
+        targets: container,
+        scaleX: 1,
+        scaleY: 1,
+        y: container.baseY,
+        duration: 200,
+        ease: "Cubic.easeOut"
+      });
+      this.tweens.add({
+        targets: textObj,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 160,
+        ease: "Sine.easeOut"
+      });
     });
 
     hitZone.on("pointerdown", () => {
       if (!container.isEnabled) return;
-      container.setScale(0.96);
-      this.time.delayedCall(90, () => container.setScale(1));
-      if (onClick) onClick();
+      drawBg(true, true);
+
+      // Shockwave Ripple Effect
+      const ripple = this.add.graphics();
+      ripple.lineStyle(3, strokeHex, 1);
+      ripple.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
+      container.addAt(ripple, 0);
+      this.tweens.add({
+        targets: ripple,
+        scaleX: 1.25,
+        scaleY: 1.38,
+        alpha: 0,
+        duration: 320,
+        ease: "Cubic.easeOut",
+        onComplete: () => ripple.destroy()
+      });
+
+      this.tweens.killTweensOf(container);
+      this.tweens.add({
+        targets: container,
+        scaleX: 0.92,
+        scaleY: 0.92,
+        y: container.baseY + 3,
+        duration: 75,
+        ease: "Quad.easeIn",
+        yoyo: true,
+        onComplete: () => {
+          container.setScale(1);
+          container.y = container.baseY;
+          drawBg(false, false);
+          if (onClick) onClick();
+        }
+      });
     });
 
-    container.add([bg, textObj, hitZone]);
+    container.add([aura, bg, shimmer, textObj, hitZone]);
     container.textObj = textObj;
     container.hitZone = hitZone;
     container.isEnabled = false;
+    container.pulseTween = null;
 
     container.setButtonEnabled = enabled => {
-      container.isEnabled = Boolean(enabled);
-      container.setScale(1);
-      drawBg(fillHex, strokeHex);
-      if (enabled) {
+      const nextState = Boolean(enabled);
+      const changed = container.isEnabled !== nextState;
+      container.isEnabled = nextState;
+
+      if (nextState) {
         container.setAlpha(1);
         hitZone.setInteractive({ useHandCursor: true });
+        if (changed) {
+          drawBg(false, false);
+          if (container.pulseTween) container.pulseTween.stop();
+          aura.setAlpha(0.25);
+          container.pulseTween = this.tweens.add({
+            targets: aura,
+            alpha: { from: 0.18, to: 0.65 },
+            scaleX: { from: 0.98, to: 1.04 },
+            scaleY: { from: 0.98, to: 1.06 },
+            duration: 850,
+            yoyo: true,
+            repeat: -1,
+            ease: "Sine.easeInOut"
+          });
+        }
       } else {
-        container.setAlpha(0.35);
+        if (container.pulseTween) {
+          container.pulseTween.stop();
+          container.pulseTween = null;
+        }
+        aura.setAlpha(0);
+        this.tweens.killTweensOf(container);
+        container.setScale(1);
+        container.y = container.baseY;
+        drawBg(false, false);
+        container.setAlpha(0.32);
         hitZone.disableInteractive();
       }
     };
@@ -703,54 +869,55 @@ export default class GameScene extends Phaser.Scene {
 
   buildStaticUI() {
     const w = this.scale.width;
-    const btnY = this.scale.height * 0.92;
-    const btnW = 210;
-    const btnH = 64;
-    const gap = 235;
+    const h = this.scale.height;
+    const btnY = h * 0.92;
+    const btnW = 212;
+    const btnH = 66;
+    const gap = 236;
     const startX = w / 2 - gap * 2;
 
-    // 1. FOLD BUTTON
+    // 1. FOLD BUTTON (Crimson Obsidian)
     this.foldBtn = this.createActionButton(
       startX,
       btnY,
       btnW,
       btnH,
       "FOLD",
-      0x24070c,
+      0x2b060d,
       0xff0033,
-      "#ff4d6d",
+      "#ff5c77",
       () => {
         if (this.sndPack) this.sndPack.play();
         this.sendAction("fold");
       }
     );
 
-    // 2. CHECK BUTTON
+    // 2. CHECK BUTTON (Cyber Cyan Obsidian)
     this.checkBtn = this.createActionButton(
       startX + gap,
       btnY,
       btnW,
       btnH,
       "CHECK",
-      0x071a26,
-      0x00d4ff,
-      "#7be0ff",
+      0x062030,
+      0x00e5ff,
+      "#8cefff",
       () => {
         if (this.sndClick) this.sndClick.play();
         this.sendAction("check");
       }
     );
 
-    // 3. CALL BUTTON
+    // 3. CALL BUTTON (Emerald Neon Obsidian)
     this.callBtn = this.createActionButton(
       startX + gap * 2,
       btnY,
       btnW,
       btnH,
       "CALL",
-      0x072412,
+      0x062914,
       0x00ff88,
-      "#00ff88",
+      "#5bffb0",
       () => {
         if (this.sndBlind) this.sndBlind.play();
         const pv = this.playerViews.find(p => p.username.toLowerCase() === this.username);
@@ -759,16 +926,16 @@ export default class GameScene extends Phaser.Scene {
       }
     );
 
-    // 4. RAISE / BET BUTTON
+    // 4. RAISE / BET BUTTON (Royal Gold Obsidian)
     this.raiseBtn = this.createActionButton(
       startX + gap * 3,
       btnY,
       btnW,
       btnH,
       "RAISE",
-      0x261c05,
+      0x2e2004,
       0xffcc00,
-      "#ffcc00",
+      "#ffe066",
       () => {
         if (this.sndClick) this.sndClick.play();
 
@@ -789,20 +956,21 @@ export default class GameScene extends Phaser.Scene {
           this.isRaising = true;
           this.setSliderTargetBet(this.minRaiseTarget);
           this.updateTurnUI();
+          this.animateRaiseTowerIn();
         }
       }
     );
 
-    // 5. ALL-IN BUTTON
+    // 5. ALL-IN BUTTON (Royal Amethyst & Gold)
     this.allInBtn = this.createActionButton(
       startX + gap * 4,
       btnY,
       btnW,
       btnH,
       "ALL-IN",
-      0x220726,
-      0xdf8eff,
-      "#f3d1ff",
+      0x290633,
+      0xe066ff,
+      "#f7ccff",
       () => {
         if (this.sndChaal) this.sndChaal.play();
         const pv = this.playerViews.find(p => p.username.toLowerCase() === this.username);
@@ -811,155 +979,373 @@ export default class GameScene extends Phaser.Scene {
       }
     );
 
-    // --- HOLD'EM RAISE SEEKBAR UI ---
-    this.raiseContainer = this.add.container(w / 2, btnY).setDepth(2000).setVisible(false);
+    // =========================================================================
+    // VERTICAL LUXURY BET SCROLL TOWER (Positioned Below EXIT Button Space)
+    // =========================================================================
+    const towerX = w - 115;
+    const towerY = h * 0.53;
+    this.raiseTowerBaseX = towerX;
+    this.raiseTowerBaseY = towerY;
 
-    const trackW = 500;
-    const trackH = 14;
+    this.raiseContainer = this.add.container(towerX, towerY).setDepth(2200).setVisible(false);
+
+    const towerW = 196;
+    const towerH = 640;
+    const trackX = 44;
+    const trackW = 18;
+    const minY = -145; // Top of vertical track = MAX / ALL-IN
+    const maxY = 135;  // Bottom of vertical track = MIN
+    this.sliderTrackX = trackX;
     this.sliderTrackW = trackW;
-    this.sliderTrackH = trackH;
+    this.sliderMinY = minY;
+    this.sliderMaxY = maxY;
 
+    // 1. Outer Glow & Obsidian Glass Tower Frame
     const panelBg = this.add.graphics();
-    panelBg.fillStyle(0x050505, 0.92);
-    panelBg.fillRoundedRect(-440, -105, 880, 150, 18);
-    panelBg.lineStyle(2, 0xffcc00, 0.8);
-    panelBg.strokeRoundedRect(-440, -105, 880, 150, 18);
+    // Outer Crimson/Gold Halo
+    panelBg.fillStyle(0xff0033, 0.14);
+    panelBg.fillRoundedRect(-towerW / 2 - 8, -towerH / 2 - 8, towerW + 16, towerH + 16, 26);
+    // Main Obsidian Body
+    panelBg.fillStyle(0x050508, 0.96);
+    panelBg.fillRoundedRect(-towerW / 2, -towerH / 2, towerW, towerH, 22);
+    // Inner Luxury Gold Frame
+    panelBg.lineStyle(2.5, 0xffcc00, 0.95);
+    panelBg.strokeRoundedRect(-towerW / 2, -towerH / 2, towerW, towerH, 22);
+    // Subtle Inner Crimson Trim
+    panelBg.lineStyle(1, 0xff0033, 0.45);
+    panelBg.strokeRoundedRect(-towerW / 2 + 5, -towerH / 2 + 5, towerW - 10, towerH - 10, 18);
+
+    // Top Amount Readout Box
+    panelBg.fillStyle(0x14080c, 0.95);
+    panelBg.fillRoundedRect(-towerW / 2 + 12, -towerH / 2 + 14, towerW - 24, 74, 14);
+    panelBg.lineStyle(1.5, 0xffcc00, 0.85);
+    panelBg.strokeRoundedRect(-towerW / 2 + 12, -towerH / 2 + 14, towerW - 24, 74, 14);
     this.raiseContainer.add(panelBg);
 
-    const trackBg = this.add.graphics();
-    trackBg.fillStyle(0x1a1a1a, 1);
-    trackBg.fillRoundedRect(-trackW / 2, -trackH / 2, trackW, trackH, 7);
-    trackBg.lineStyle(2, 0x555555, 1);
-    trackBg.strokeRoundedRect(-trackW / 2, -trackH / 2, trackW, trackH, 7);
-    this.raiseContainer.add(trackBg);
-
-    this.raiseFill = this.add.graphics();
-    this.raiseContainer.add(this.raiseFill);
-
-    this.raiseThumb = this.add
-      .circle(-trackW / 2, 0, 22, 0xffcc00)
-      .setInteractive({ useHandCursor: true, draggable: true });
-    this.raiseThumb.setStrokeStyle(4, 0xffffff);
-    this.input.setDraggable(this.raiseThumb);
-    this.raiseContainer.add(this.raiseThumb);
+    // Header Title & Live Amount Text
+    this.raiseHeaderLabel = this.add
+      .text(0, -towerH / 2 + 32, "RAISE TO", {
+        fontFamily: "Courier New",
+        fontSize: "14px",
+        color: "#ffcc00",
+        fontWeight: "bold",
+        letterSpacing: 2
+      })
+      .setOrigin(0.5);
 
     this.raiseAmountTextUI = this.add
-      .text(0, -68, "RAISE TO: 0", {
+      .text(0, -towerH / 2 + 62, "0", {
         fontFamily: "Impact, Arial Black",
-        fontSize: "30px",
+        fontSize: "28px",
         color: "#ffffff",
-        letterSpacing: 2,
+        letterSpacing: 1.5,
         stroke: "#ff0033",
         strokeThickness: 4
       })
       .setOrigin(0.5);
-    this.raiseContainer.add(this.raiseAmountTextUI);
+    this.raiseContainer.add([this.raiseHeaderLabel, this.raiseAmountTextUI]);
 
-    const presets = [
-      { label: "MIN", x: -220, getTarget: () => this.minRaiseTarget },
-      {
-        label: "1/2 POT",
-        x: -75,
-        getTarget: () => this.highestBet + Math.max(this.smallBlind, Math.floor(this.pot * 0.5))
-      },
-      {
-        label: "POT",
-        x: 75,
-        getTarget: () => this.highestBet + Math.max(this.bigBlind, this.pot)
-      },
-      { label: "MAX", x: 220, getTarget: () => this.maxRaiseTarget }
-    ];
+    // 2. Vertical Slider Track & Tick Marks
+    const trackBg = this.add.graphics();
+    // Tick marks along the vertical track
+    for (let t = 0; t <= 10; t++) {
+      const ty = minY + (t / 10) * (maxY - minY);
+      const isMajor = t === 0 || t === 5 || t === 10;
+      trackBg.lineStyle(isMajor ? 2 : 1, isMajor ? 0xffcc00 : 0x555555, isMajor ? 0.8 : 0.45);
+      trackBg.beginPath();
+      trackBg.moveTo(trackX - trackW / 2 - (isMajor ? 10 : 6), ty);
+      trackBg.lineTo(trackX - trackW / 2 - 2, ty);
+      trackBg.strokePath();
+    }
+    // Track Well
+    trackBg.fillStyle(0x14141c, 1);
+    trackBg.fillRoundedRect(trackX - trackW / 2, minY, trackW, maxY - minY, 9);
+    trackBg.lineStyle(2, 0x444455, 1);
+    trackBg.strokeRoundedRect(trackX - trackW / 2, minY, trackW, maxY - minY, 9);
+    this.raiseContainer.add(trackBg);
 
-    presets.forEach(pr => {
-      const pBg = this.add.graphics();
-      pBg.fillStyle(0x1f1f1f, 1).fillRoundedRect(pr.x - 55, -42, 110, 26, 6);
-      pBg.lineStyle(1, 0xffcc00, 0.8).strokeRoundedRect(pr.x - 55, -42, 110, 26, 6);
-      const pTxt = this.add
-        .text(pr.x, -29, pr.label, {
+    // Dynamic Vertical Fill Bar (Fills from Bottom up to Thumb)
+    this.raiseFill = this.add.graphics();
+    this.raiseContainer.add(this.raiseFill);
+
+    // Interactive Track Hit Zone (Click anywhere on track to jump to that bet)
+    const trackHitZone = this.add
+      .zone(trackX, (minY + maxY) / 2, 48, maxY - minY + 30)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    trackHitZone.on("pointerdown", pointer => {
+      if (this.sndClick) this.sndClick.play();
+      const localY = pointer.y - this.raiseContainer.y;
+      const clampedY = Phaser.Math.Clamp(localY, minY, maxY);
+      const percent = (maxY - clampedY) / (maxY - minY);
+      const rawTarget = this.minRaiseTarget + percent * (this.maxRaiseTarget - this.minRaiseTarget);
+      this.setSliderTargetBet(rawTarget);
+    });
+    this.raiseContainer.add(trackHitZone);
+
+    // Draggable Luxury Gold & Crimson Thumb
+    this.raiseThumbGlow = this.add.circle(trackX, maxY, 26, 0xff0033, 0.35);
+    this.raiseThumb = this.add
+      .circle(trackX, maxY, 18, 0xffcc00)
+      .setInteractive({ useHandCursor: true, draggable: true });
+    this.raiseThumb.setStrokeStyle(3.5, 0xffffff);
+    this.input.setDraggable(this.raiseThumb);
+    this.raiseContainer.add([this.raiseThumbGlow, this.raiseThumb]);
+
+    this.tweens.add({
+      targets: this.raiseThumbGlow,
+      scaleX: { from: 0.9, to: 1.25 },
+      scaleY: { from: 0.9, to: 1.25 },
+      alpha: { from: 0.45, to: 0.15 },
+      duration: 700,
+      yoyo: true,
+      repeat: -1
+    });
+
+    // + and - Fine-Tune Step Buttons at Top & Bottom of Track
+    const makeStepBtn = (bx, by, symbol, deltaSign) => {
+      const sContainer = this.add.container(bx, by);
+      const sBg = this.add.graphics();
+      sBg.fillStyle(0x161622, 1).fillCircle(0, 0, 18);
+      sBg.lineStyle(2, 0xffcc00, 0.9).strokeCircle(0, 0, 18);
+      const sTxt = this.add
+        .text(0, -1, symbol, {
           fontFamily: "Arial Black",
-          fontSize: "13px",
+          fontSize: "20px",
           color: "#ffcc00"
         })
         .setOrigin(0.5);
-      const pZone = this.add
-        .zone(pr.x, -29, 110, 26)
+      const sZone = this.add
+        .zone(0, 0, 38, 38)
         .setOrigin(0.5)
-        .setInteractive({ useHandCursor: true })
-        .on("pointerdown", () => {
-          if (this.sndClick) this.sndClick.play();
-          this.setSliderTargetBet(pr.getTarget());
+        .setInteractive({ useHandCursor: true });
+
+      sZone.on("pointerover", () => sContainer.setScale(1.12));
+      sZone.on("pointerout", () => sContainer.setScale(1));
+      sZone.on("pointerdown", () => {
+        if (this.sndClick) this.sndClick.play();
+        sContainer.setScale(0.9);
+        this.time.delayedCall(80, () => sContainer.setScale(1));
+        const step = 10;
+        this.setSliderTargetBet(this.currentRaiseTarget + deltaSign * step);
+      });
+      sContainer.add([sBg, sTxt, sZone]);
+      return sContainer;
+    };
+
+    const plusBtn = makeStepBtn(trackX, minY - 34, "+", 1);
+    const minusBtn = makeStepBtn(trackX, maxY + 34, "−", -1);
+    this.raiseContainer.add([plusBtn, minusBtn]);
+
+    // 3. Vertical Quick-Preset Pills on the Left Column of the Tower
+    const presets = [
+      { label: "MAX", y: -135, color: 0xff0033, getTarget: () => this.maxRaiseTarget },
+      {
+        label: "POT",
+        y: -45,
+        color: 0xffcc00,
+        getTarget: () => this.highestBet + Math.max(this.bigBlind, this.pot)
+      },
+      {
+        label: "1/2 POT",
+        y: 45,
+        color: 0x00e5ff,
+        getTarget: () => this.highestBet + Math.max(this.smallBlind, Math.floor(this.pot * 0.5))
+      },
+      { label: "MIN", y: 135, color: 0x00ff88, getTarget: () => this.minRaiseTarget }
+    ];
+
+    presets.forEach(pr => {
+      const pContainer = this.add.container(-36, pr.y);
+      const pW = 92;
+      const pH = 42;
+      const pBg = this.add.graphics();
+      const drawPreset = hovered => {
+        pBg.clear();
+        pBg.fillStyle(hovered ? pr.color : 0x12121a, hovered ? 0.28 : 0.95);
+        pBg.fillRoundedRect(-pW / 2, -pH / 2, pW, pH, 10);
+        pBg.lineStyle(hovered ? 2.5 : 1.5, pr.color, 0.95);
+        pBg.strokeRoundedRect(-pW / 2, -pH / 2, pW, pH, 10);
+      };
+      drawPreset(false);
+
+      const pTxt = this.add
+        .text(0, 0, pr.label, {
+          fontFamily: "Impact, Arial Black",
+          fontSize: "16px",
+          color: "#ffffff",
+          letterSpacing: 1,
+          stroke: "#000000",
+          strokeThickness: 3
+        })
+        .setOrigin(0.5);
+
+      const pZone = this.add
+        .zone(0, 0, pW, pH)
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
+
+      pZone.on("pointerover", () => {
+        drawPreset(true);
+        this.tweens.add({ targets: pContainer, scaleX: 1.07, scaleY: 1.07, duration: 120 });
+      });
+      pZone.on("pointerout", () => {
+        drawPreset(false);
+        this.tweens.add({ targets: pContainer, scaleX: 1, scaleY: 1, duration: 120 });
+      });
+      pZone.on("pointerdown", () => {
+        if (this.sndClick) this.sndClick.play();
+        this.tweens.add({
+          targets: pContainer,
+          scaleX: 0.92,
+          scaleY: 0.92,
+          duration: 70,
+          yoyo: true
         });
-      this.raiseContainer.add([pBg, pTxt, pZone]);
+        this.setSliderTargetBet(pr.getTarget());
+      });
+
+      pContainer.add([pBg, pTxt, pZone]);
+      this.raiseContainer.add(pContainer);
     });
 
-    const cancelBg = this.add.graphics();
-    cancelBg.fillStyle(0x2a080c, 1).fillRoundedRect(-trackW / 2 - 165, -24, 130, 48, 10);
-    cancelBg.lineStyle(2, 0xff4444, 1).strokeRoundedRect(-trackW / 2 - 165, -24, 130, 48, 10);
-    const cancelRaiseBtn = this.add
-      .text(-trackW / 2 - 100, 0, "CANCEL", {
-        fontFamily: "Impact, Arial Black",
-        fontSize: "22px",
-        color: "#ff4444"
-      })
-      .setOrigin(0.5);
-    const cancelZone = this.add
-      .zone(-trackW / 2 - 100, 0, 130, 48)
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+    // 4. Confirm & Cancel Buttons at the Bottom of the Vertical Tower
+    const makeTowerActionBtn = (by, bHeight, labelText, fillHex, borderHex, textColor, onTrigger) => {
+      const bCont = this.add.container(0, by);
+      const bWidth = towerW - 26;
+      const bGfx = this.add.graphics();
+      const drawBtn = hovered => {
+        bGfx.clear();
+        bGfx.fillStyle(fillHex, hovered ? 1 : 0.9);
+        bGfx.fillRoundedRect(-bWidth / 2, -bHeight / 2, bWidth, bHeight, 12);
+        bGfx.fillStyle(0xffffff, hovered ? 0.16 : 0.07);
+        bGfx.fillRoundedRect(-bWidth / 2 + 4, -bHeight / 2 + 3, bWidth - 8, bHeight * 0.42, 8);
+        bGfx.lineStyle(hovered ? 3 : 2, borderHex, 1);
+        bGfx.strokeRoundedRect(-bWidth / 2, -bHeight / 2, bWidth, bHeight, 12);
+      };
+      drawBtn(false);
 
-    const confirmBg = this.add.graphics();
-    confirmBg.fillStyle(0x082a12, 1).fillRoundedRect(trackW / 2 + 35, -24, 130, 48, 10);
-    confirmBg.lineStyle(2, 0x00ff88, 1).strokeRoundedRect(trackW / 2 + 35, -24, 130, 48, 10);
-    const confirmRaiseBtn = this.add
-      .text(trackW / 2 + 100, 0, "CONFIRM", {
-        fontFamily: "Impact, Arial Black",
-        fontSize: "22px",
-        color: "#00ff88"
-      })
-      .setOrigin(0.5);
-    const confirmZone = this.add
-      .zone(trackW / 2 + 100, 0, 130, 48)
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
+      const bTxt = this.add
+        .text(0, 0, labelText, {
+          fontFamily: "Impact, Arial Black",
+          fontSize: "21px",
+          color: textColor,
+          letterSpacing: 1.5,
+          stroke: "#000000",
+          strokeThickness: 4
+        })
+        .setOrigin(0.5);
 
-    this.raiseContainer.add([cancelBg, cancelRaiseBtn, cancelZone, confirmBg, confirmRaiseBtn, confirmZone]);
+      const bZone = this.add
+        .zone(0, 0, bWidth, bHeight)
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
 
-    this.raiseThumb.on("drag", (pointer, dragX) => {
-      const minX = -trackW / 2;
-      const maxX = trackW / 2;
-      const clampedX = Phaser.Math.Clamp(dragX, minX, maxX);
-      const percent = (clampedX - minX) / (maxX - minX);
+      bZone.on("pointerover", () => {
+        drawBtn(true);
+        this.tweens.add({ targets: bCont, scaleX: 1.05, scaleY: 1.05, duration: 130 });
+      });
+      bZone.on("pointerout", () => {
+        drawBtn(false);
+        this.tweens.add({ targets: bCont, scaleX: 1, scaleY: 1, duration: 130 });
+      });
+      bZone.on("pointerdown", () => {
+        this.tweens.add({
+          targets: bCont,
+          scaleX: 0.93,
+          scaleY: 0.93,
+          duration: 70,
+          yoyo: true,
+          onComplete: onTrigger
+        });
+      });
+
+      bCont.add([bGfx, bTxt, bZone]);
+      return bCont;
+    };
+
+    const confirmTowerBtn = makeTowerActionBtn(
+      224,
+      50,
+      "CONFIRM BET",
+      0x072b14,
+      0x00ff88,
+      "#5bffb0",
+      () => {
+        if (this.sndChaal) this.sndChaal.play();
+        const me = this.players.find(p => p.username.toLowerCase() === this.username);
+        const myInvested = me ? me.investedThisPhase || 0 : 0;
+        const chipsToInvestNow = Math.max(0, this.currentRaiseTarget - myInvested);
+
+        const pv = this.playerViews.find(p => p.username.toLowerCase() === this.username);
+        if (pv) this.animateBetToDealer(pv.seat.x, pv.seat.y);
+
+        const act = this.currentRaiseTarget >= this.maxRaiseTarget ? "all_in" : "raise";
+        this.sendAction(act, { amount: chipsToInvestNow, targetBet: this.currentRaiseTarget });
+
+        this.isRaising = false;
+        this.updateTurnUI();
+      }
+    );
+
+    const cancelTowerBtn = makeTowerActionBtn(
+      282,
+      42,
+      "CANCEL",
+      0x29070d,
+      0xff0033,
+      "#ff5c77",
+      () => {
+        if (this.sndClickClose) this.sndClickClose.play();
+        this.isRaising = false;
+        this.updateTurnUI();
+      }
+    );
+
+    this.raiseContainer.add([confirmTowerBtn, cancelTowerBtn]);
+
+    // Vertical Drag Handler (Up = Higher Bet, Down = Lower Bet)
+    this.raiseThumb.on("drag", (pointer, dragX, dragY) => {
+      const clampedY = Phaser.Math.Clamp(dragY, minY, maxY);
+      const percent = (maxY - clampedY) / (maxY - minY);
       const rawTarget = this.minRaiseTarget + percent * (this.maxRaiseTarget - this.minRaiseTarget);
       this.setSliderTargetBet(rawTarget);
     });
 
-    cancelZone.on("pointerdown", () => {
-      if (this.sndClickClose) this.sndClickClose.play();
-      this.isRaising = false;
-      this.updateTurnUI();
+    // Mouse Wheel Support while Vertical Bet Tower is Open
+    this.input.on("wheel", (pointer, gameObjects, dx, dy) => {
+      if (!this.isRaising || !this.raiseContainer.visible) return;
+      const step = 10;
+      const direction = dy < 0 ? 1 : -1;
+      this.setSliderTargetBet(this.currentRaiseTarget + direction * step);
     });
+  }
 
-    confirmZone.on("pointerdown", () => {
-      if (this.sndChaal) this.sndChaal.play();
-      const me = this.players.find(p => p.username.toLowerCase() === this.username);
-      const myInvested = me ? me.investedThisPhase || 0 : 0;
-      const chipsToInvestNow = Math.max(0, this.currentRaiseTarget - myInvested);
+  animateRaiseTowerIn() {
+    if (!this.raiseContainer) return;
+    this.tweens.killTweensOf(this.raiseContainer);
+    this.raiseContainer.setVisible(true);
+    this.raiseContainer.x = this.raiseTowerBaseX + 180;
+    this.raiseContainer.setAlpha(0);
+    this.raiseContainer.setScale(0.9);
 
-      const pv = this.playerViews.find(p => p.username.toLowerCase() === this.username);
-      if (pv) this.animateBetToDealer(pv.seat.x, pv.seat.y);
-
-      const act = this.currentRaiseTarget >= this.maxRaiseTarget ? "all_in" : "raise";
-      this.sendAction(act, { amount: chipsToInvestNow, targetBet: this.currentRaiseTarget });
-
-      this.isRaising = false;
-      this.updateTurnUI();
+    this.tweens.add({
+      targets: this.raiseContainer,
+      x: this.raiseTowerBaseX,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 260,
+      ease: "Back.easeOut"
     });
   }
 
   setSliderTargetBet(targetBetAmount) {
-    const minX = -this.sliderTrackW / 2;
-    const maxX = this.sliderTrackW / 2;
-    const snapUnit = Math.max(1, this.smallBlind || Math.floor(this.bigBlind / 2) || 5);
+    const minY = this.sliderMinY;
+    const maxY = this.sliderMaxY;
+    const trackX = this.sliderTrackX;
+    const trackW = this.sliderTrackW;
+    const snapUnit = 10;
 
     let snapped = Math.round(targetBetAmount / snapUnit) * snapUnit;
     if (targetBetAmount >= this.maxRaiseTarget) snapped = this.maxRaiseTarget;
@@ -970,19 +1356,32 @@ export default class GameScene extends Phaser.Scene {
         ? 1
         : (this.currentRaiseTarget - this.minRaiseTarget) / (this.maxRaiseTarget - this.minRaiseTarget);
 
-    this.raiseThumb.x = minX + snappedPercent * (maxX - minX);
-    const labelPrefix =
+    // Vertical position: maxY is bottom (0%), minY is top (100%)
+    const thumbY = maxY - snappedPercent * (maxY - minY);
+    this.raiseThumb.x = trackX;
+    this.raiseThumb.y = thumbY;
+    if (this.raiseThumbGlow) {
+      this.raiseThumbGlow.x = trackX;
+      this.raiseThumbGlow.y = thumbY;
+    }
+
+    const headerTitle =
       this.currentRaiseTarget >= this.maxRaiseTarget
-        ? "ALL-IN: "
+        ? "ALL-IN"
         : this.highestBet === 0
-        ? "BET: "
-        : "RAISE TO: ";
-    this.raiseAmountTextUI.setText(labelPrefix + this.currentRaiseTarget.toLocaleString());
+        ? "BET AMOUNT"
+        : "RAISE TO";
+    if (this.raiseHeaderLabel) this.raiseHeaderLabel.setText(headerTitle);
+    this.raiseAmountTextUI.setText(this.currentRaiseTarget.toLocaleString());
 
     this.raiseFill.clear();
+    const fillH = Math.max(10, maxY - thumbY);
+    // Outer Crimson Neon Fill
     this.raiseFill.fillStyle(0xff0033, 1);
-    const fillW = Math.max(10, this.raiseThumb.x - minX);
-    this.raiseFill.fillRoundedRect(minX, -this.sliderTrackH / 2, fillW, this.sliderTrackH, 7);
+    this.raiseFill.fillRoundedRect(trackX - trackW / 2, thumbY, trackW, fillH, 8);
+    // Inner Gold Core Strip
+    this.raiseFill.fillStyle(0xffcc00, 0.85);
+    this.raiseFill.fillRoundedRect(trackX - 3, thumbY + 2, 6, Math.max(6, fillH - 4), 3);
   }
 
   createBalanceBadge(x, y, width, height, angle, initialCoins) {
@@ -1014,11 +1413,11 @@ export default class GameScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
     const seatPositions = [
-      { x: w * 0.5, y: h * 0.72, inward: -90, textAngle: 0 },
-      { x: w * 0.25, y: h * 0.6, inward: -35, textAngle: 55 },
-      { x: w * 0.255, y: h * 0.36, inward: 35, textAngle: -55 },
-      { x: w * 0.755, y: h * 0.36, inward: 145, textAngle: 55 },
-      { x: w * 0.76, y: h * 0.6, inward: -145, textAngle: -55 }
+      { x: w * 0.5, y: h * 0.70, inward: -90, textAngle: 0 },
+      { x: w * 0.25, y: h * 0.6, inward: -35, textAngle: 48 },
+      { x: w * 0.275, y: h * 0.36, inward: 35, textAngle: -42 },
+      { x: w * 0.730, y: h * 0.37, inward: 145, textAngle: 42 },
+      { x: w * 0.76, y: h * 0.6, inward: -145, textAngle: -52 }
     ];
 
     let selfPlayer = null;
@@ -1296,7 +1695,7 @@ export default class GameScene extends Phaser.Scene {
                       text-transform: uppercase;
                       text-shadow: 2px 2px 0px #330000;
                   ">WARNING</h1>
-                  
+
                   <p style="
                       margin: 0 0 35px 0;
                       font-family: 'Courier New', monospace;
@@ -1307,7 +1706,7 @@ export default class GameScene extends Phaser.Scene {
                       text-align: center;
                       text-shadow: 0 0 5px rgba(255, 204, 0, 0.3);
                   ">Are you sure you want to exit?<br>If the match has started, you will<br>lose your invested amount.</p>
-                  
+
                   <div style="display: flex; gap: 20px;">
                       <button id="confirmBtn" style="
                           background: rgba(255, 0, 51, 0.05); 
@@ -1466,7 +1865,7 @@ export default class GameScene extends Phaser.Scene {
                       text-transform: uppercase;
                       text-shadow: 2px 2px 0px #332200;
                   ">${titleText}</h1>
-                  
+
                   <p style="
                       margin: 0 0 35px 0;
                       font-family: 'Courier New', monospace;
@@ -1475,7 +1874,7 @@ export default class GameScene extends Phaser.Scene {
                       font-weight: bold;
                       text-align: center;
                   ">${bodyHtml}</p>
-                  
+
                   <button id="winnerOkBtn" style="
                       background: rgba(255, 204, 0, 0.05); 
                       border: 1px solid #ffcc00;
@@ -1829,7 +2228,7 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.isRaising && isUserTurn) {
       buttons.forEach(btn => {
-        btn.setVisible(false);
+        btn.setVisible(true);
         btn.setButtonEnabled(false);
       });
       this.raiseContainer.setVisible(true);

@@ -1,8 +1,12 @@
 const userConfig = {
-  uname: "birta",
-  password: "69bfb6f2254d955bc76c179f7b1edb317b6b64dc9f2cc1107917cedf6dc1c373",
-  device_id: "dev_aawcz4m9g_mrwvl22x", // Will be assigned programmatically if required, or left blank
-  device_name: "Android Phone"
+  uname: "razor420",
+  password: "b684da65d3d6c76f96bcc7b3e0f0920e2e0c27d4c1071f8e17efe141434cd77d",
+  device_id: "dev_cvbhe49dv_mrrpi73h",
+  device_name: "Windows PC",
+  game: "poker_holdem",
+  game_name: "Poker Holdem",
+  width: 1920,
+  height: 1080
 };
 
 export default userConfig;
