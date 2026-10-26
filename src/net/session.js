@@ -40,7 +40,7 @@ const session = {
     }
 
     this.uid = Date.now().toString();
-    this.socket = io("http://localhost:5001/", {
+    this.socket = io("https://poker.bluff365.com", {
       transports: ["websocket", "polling"],
       reconnection: true,
       reconnectionAttempts: 5
