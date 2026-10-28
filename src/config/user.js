@@ -5,6 +5,7 @@ const userConfig = {
   device_name: "Windows PC",
   game: "poker_holdem",
   game_name: "Poker Holdem",
+  profile_num: 1,
   width: 1920,
   height: 1080
 };

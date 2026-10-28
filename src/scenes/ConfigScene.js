@@ -71,6 +71,9 @@ export default class ConfigScene extends Phaser.Scene {
     session.socket.on("game_tables_response", payload => {
       if (!payload || !payload.success) return;
       this.tables = Array.isArray(payload.tables) ? payload.tables : [];
+
+      // Sort tables by their database sort_order to exactly match your MongoDB configuration
+      this.tables = rawTables.sort((a, b) => Number(a.sort_order || 99) - Number(b.sort_order || 99));
       
       if (this.cityPanelVisible && this.tables[this.selectedTableIndex]) {
         const table = this.tables[this.selectedTableIndex];
@@ -494,8 +497,17 @@ export default class ConfigScene extends Phaser.Scene {
       });
 
       joinZone.on("pointerdown", () => {
+        // PREVENT DOUBLE CLICK SPAM
+        if (joinZone.isJoining) return;
+        joinZone.isJoining = true;
+
         if (this.sndClick) this.sndClick.play();
         this.handleJoinCity(table, idx);
+        
+        // Re-enable the button after 2 seconds (in case of a network error)
+        this.time.delayedCall(2000, () => {
+            joinZone.isJoining = false;
+        });
       });
 
       this.cityRowTexts[idx] = { activeText, sessionText, runningText };
@@ -536,11 +548,12 @@ export default class ConfigScene extends Phaser.Scene {
 
     if (this.waitOverlay) this.hideWaitingOverlay();
 
-    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setInteractive().setDepth(3000);
+// FIX: Push depth to 20000 so it sits above the cityLayer (5000)
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setInteractive().setDepth(20000);
     dim.on("pointerdown", pointer => pointer.event.stopPropagation());
     dim.on("pointerup", pointer => pointer.event.stopPropagation());
     
-    const mainContainer = this.add.container(w / 2, h / 2).setDepth(3001);
+    const mainContainer = this.add.container(w / 2, h / 2).setDepth(20001);
     const contents = [];
 
     const panelW = 850;

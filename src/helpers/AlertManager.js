@@ -6,7 +6,7 @@ export default class AlertManager {
         // 1. Dark Background Overlay
         const overlay = scene.add.rectangle(centerX, centerY, scene.scale.width, scene.scale.height, 0x000000, 0);
         overlay.setInteractive(); 
-        overlay.setDepth(9999);
+        overlay.setDepth(20000); // Forces the dark background above the ConfigScene UI
 
         // Fade in the dark background
         scene.tweens.add({
@@ -95,7 +95,7 @@ export default class AlertManager {
         `;
 
         const dialogDOM = scene.add.dom(centerX, centerY).createFromHTML(html);
-        dialogDOM.setDepth(10000); 
+        dialogDOM.setDepth(20001); // Forces the alert box above the dark background
 
         // 3. Grab the elements by ID
         const wrapper = dialogDOM.getChildByID('cyberAlertWrapper');
@@ -162,7 +162,7 @@ export default class AlertManager {
     const h = scene.scale.height;
 
     const centerX = w / 2;
-    const defaultCenterY = h * 0.52; // Slightly below center so it doesn't block community cards
+    const defaultCenterY = h * 0.47; // Slightly below center so it doesn't block community cards
 
     if (!AlertManager.activeToasts) AlertManager.activeToasts = [];
     AlertManager.activeToasts = AlertManager.activeToasts.filter(t => t.scene && t.scene.sys.isActive());

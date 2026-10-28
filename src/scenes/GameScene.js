@@ -178,7 +178,7 @@ export default class GameScene extends Phaser.Scene {
 
     const nameParts = displayCityName.toUpperCase().split(" ");
     this.add
-      .text(w * 0.32, 235, nameParts[0] || "PRIVATE", {
+      .text(w * 0.38, 250, nameParts[0] || "PRIVATE", {
         fontFamily: "Arial Black, Impact",
         fontSize: "28px",
         color: themeStyles.primaryColor,
@@ -190,7 +190,7 @@ export default class GameScene extends Phaser.Scene {
       .setShadow(0, 4, themeStyles.shadowColor, themeStyles.shadowBlur, true, true);
 
     this.add
-      .text(w * 0.68, 235, nameParts.slice(1).join(" ") || "ROOM", {
+      .text(w * 0.62, 250, nameParts.slice(1).join(" ") || "ROOM", {
         fontFamily: "Arial Black, Impact",
         fontSize: "28px",
         color: themeStyles.secondaryColor,
@@ -238,7 +238,7 @@ export default class GameScene extends Phaser.Scene {
       .setAlpha(0.2);
 
     this.betInfoText = this.add
-      .text(w / 2 - 520, 60, "", {
+      .text(w / 2.5 - 520, 60, "", {
         fontFamily: "Arial Black",
         fontSize: "28px",
         color: "#ffffff",
@@ -259,23 +259,23 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     this.dealerX = w / 2;
-    this.dealerY = h * 0.17;
-    this.dealerHandY = this.dealerY + 75;
+    this.dealerY = h * 0.14;
+    this.dealerHandY = this.dealerY + 200;
 
-    this.add.image(this.dealerX, this.dealerY, "dealer_girl").setScale(0.4);
-    this.potY = this.dealerY + 90;
+    this.add.image(this.dealerX, this.dealerY, "dealer_girl").setScale(0.35);
+    this.potY = this.dealerY + 180;
 
     // --- COMMUNITY CARDS (5 CENTER SLOTS) ---
-    this.communityFinalScale = 0.32;
+    this.communityFinalScale = 0.38;
     const communityY = h * 0.38;
-    const communitySpacing = 85;
+    const communitySpacing = 90;
     const communityStartX = w / 2 - communitySpacing * 2;
 
     for (let i = 0; i < 5; i++) {
       const targetX = communityStartX + i * communitySpacing;
       const container = this.add.container(targetX, communityY).setAlpha(0).setDepth(50);
 
-      const border = this.add.image(0, 0, "card_back").setTint(0xffd700).setScale(1.08).setAlpha(0.85);
+      const border = this.add.image(0, 0, "card_back").setTint(0xffd700).setScale(1.08).setAlpha(0);
       const card = this.add.image(0, 0, "card_back");
 
       container.add([border, card]);

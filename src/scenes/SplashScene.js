@@ -26,6 +26,8 @@ export default class SplashScene extends Phaser.Scene {
                 userConfig.password = data.password || userConfig.password || "";
                 userConfig.device_name = data.device_name || userConfig.device_name || "";
                 userConfig.device_id = data.device_id || userConfig.device_id || "";
+                // NEW: Extract profile_num from the URL data
+                userConfig.profile_num = data.profile_num || data.profilenumber || userConfig.profile_num || 1;
             } catch (e) {}
         }
 
@@ -334,11 +336,16 @@ export default class SplashScene extends Phaser.Scene {
                 this.authLoadingText.setAlpha(1);
                 this.authLoadingText.setText("Welcome " + (payload.uname || uname).toUpperCase());
 
+                console.log("Login successful. User data:", payload);
+
                 const resolvedUname = (payload && payload.uname) ? payload.uname : (userConfig.uname || uname);
+                // NEW: Use profile_num for the avatar URL
+                const profileNum = (payload && payload.profile_num) ? payload.profile_num : (userConfig.profile_num || 1);
+                
                 const userKey = `avatar_${resolvedUname.toLowerCase()}`;
                 this.load.image({
                     key: userKey,
-                    url: `https://teenpatti.bluff365.com/avatar/${resolvedUname.toLowerCase()}`,
+                    url: `https://api.bluff365.com/profiles/${profileNum}.png`,
                     XHRSettings: { responseType: "blob" },
                     crossOrigin: "anonymous"
                 });
@@ -354,7 +361,8 @@ export default class SplashScene extends Phaser.Scene {
                             deviceName: (payload && payload.device_name) || userConfig.device_name || "",
                             coins: result.bluff_coins || 0,
                             pwdhash: result.pwdhash || "",
-                            activeMatch: result.activeMatch
+                            activeMatch: result.activeMatch,
+                            profile_num: profileNum // NEW: Pass it to the next scene just in case
                         });
                     });
                 });
