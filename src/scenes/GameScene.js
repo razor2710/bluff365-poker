@@ -737,6 +737,45 @@ export default class GameScene extends Phaser.Scene {
       });
     };
 
+    // Make buttons touch-friendly on Android
+    hitZone.on("pointerdown", () => {
+      if (!container.isEnabled) return;
+      drawBg(true, true);
+      triggerShimmerSweep();
+
+      // Shockwave Ripple Effect
+      const ripple = this.add.graphics();
+      ripple.lineStyle(3, strokeHex, 1);
+      ripple.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
+      container.addAt(ripple, 0);
+      this.tweens.add({
+        targets: ripple,
+        scaleX: 1.25,
+        scaleY: 1.38,
+        alpha: 0,
+        duration: 320,
+        ease: "Cubic.easeOut",
+        onComplete: () => ripple.destroy()
+      });
+
+      this.tweens.killTweensOf(container);
+      this.tweens.add({
+        targets: container,
+        scaleX: 0.92,
+        scaleY: 0.92,
+        y: container.baseY + 3,
+        duration: 75,
+        ease: "Quad.easeIn",
+        yoyo: true,
+        onComplete: () => {
+          container.setScale(1);
+          container.y = container.baseY;
+          drawBg(false, false);
+          if (onClick) onClick();
+        }
+      });
+    });
+
     hitZone.on("pointerover", () => {
       if (!container.isEnabled) return;
       drawBg(true, false);
@@ -776,43 +815,6 @@ export default class GameScene extends Phaser.Scene {
         scaleY: 1,
         duration: 160,
         ease: "Sine.easeOut"
-      });
-    });
-
-    hitZone.on("pointerdown", () => {
-      if (!container.isEnabled) return;
-      drawBg(true, true);
-
-      // Shockwave Ripple Effect
-      const ripple = this.add.graphics();
-      ripple.lineStyle(3, strokeHex, 1);
-      ripple.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
-      container.addAt(ripple, 0);
-      this.tweens.add({
-        targets: ripple,
-        scaleX: 1.25,
-        scaleY: 1.38,
-        alpha: 0,
-        duration: 320,
-        ease: "Cubic.easeOut",
-        onComplete: () => ripple.destroy()
-      });
-
-      this.tweens.killTweensOf(container);
-      this.tweens.add({
-        targets: container,
-        scaleX: 0.92,
-        scaleY: 0.92,
-        y: container.baseY + 3,
-        duration: 75,
-        ease: "Quad.easeIn",
-        yoyo: true,
-        onComplete: () => {
-          container.setScale(1);
-          container.y = container.baseY;
-          drawBg(false, false);
-          if (onClick) onClick();
-        }
       });
     });
 
