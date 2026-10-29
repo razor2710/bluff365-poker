@@ -132,12 +132,12 @@ export default class PrivateRoomUI {
         mainContainer.add(panel);
 
         const title = scene.add.text(0, -160, "PRIVATE ROOMS", {
-            fontFamily: "Impact, Arial Black", fontSize: "42px", color: "#ff0033", stroke: "#330000", strokeThickness: 3, letterSpacing: 3
+            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "42px", color: "#ff0033", stroke: "#330000", strokeThickness: 3, letterSpacing: 3
         }).setOrigin(0.5);
         contents.push(title);
 
         const closeBtn = scene.add.text(panelW/2 - 50, -panelH/2 + 40, "X", {
-            fontFamily: "Impact, Arial Black", fontSize: "40px", color: "#ffcc00"
+            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ffcc00"
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
         contents.push(closeBtn);
 
@@ -145,7 +145,7 @@ export default class PrivateRoomUI {
         const joinBg = scene.add.graphics();
         joinBg.fillStyle(0x050505, 1).fillRoundedRect(-260, -40, 520, 80, 12);
         joinBg.lineStyle(2, 0xffcc00, 1).strokeRoundedRect(-260, -40, 520, 80, 12); // Gold border
-        const joinTxt = scene.add.text(0, 0, "JOIN BY ID", { fontFamily: "Impact, Arial Black", fontSize: "32px", color: "#ffcc00", letterSpacing: 2 }).setOrigin(0.5);
+        const joinTxt = scene.add.text(0, 0, "JOIN BY ID", { fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: "#ffcc00", letterSpacing: 2 }).setOrigin(0.5);
         const joinZone = scene.add.zone(-260, -40, 520, 80).setOrigin(0).setInteractive({ useHandCursor: true });
         contents.push(joinBg, joinTxt, joinZone);
 
@@ -157,7 +157,7 @@ export default class PrivateRoomUI {
         const createBg = scene.add.graphics();
         createBg.fillStyle(0x050505, 1).fillRoundedRect(-260, 80, 520, 80, 12);
         createBg.lineStyle(2, 0xff0033, 1).strokeRoundedRect(-260, 80, 520, 80, 12); // Red border
-        const createTxt = scene.add.text(0, 120, "CREATE ROOM", { fontFamily: "Impact, Arial Black", fontSize: "32px", color: "#ff0033", letterSpacing: 2 }).setOrigin(0.5);
+        const createTxt = scene.add.text(0, 120, "CREATE ROOM", { fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: "#ff0033", letterSpacing: 2 }).setOrigin(0.5);
         const createZone = scene.add.zone(-260, 80, 520, 80).setOrigin(0).setInteractive({ useHandCursor: true });
         contents.push(createBg, createTxt, createZone);
 
@@ -227,7 +227,7 @@ export default class PrivateRoomUI {
         panel.lineStyle(4, 0xff0033, 1).strokeRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 12);
         mainContainer.add(panel);
 
-        const closeBtn = scene.add.text(panelW/2 - 50, -panelH/2 + 40, "X", { fontFamily: "Impact, Arial Black", fontSize: "40px", color: "#ffcc00" }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+        const closeBtn = scene.add.text(panelW/2 - 50, -panelH/2 + 40, "X", { fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ffcc00" }).setOrigin(0.5).setInteractive({ useHandCursor: true });
         contents.push(closeBtn);
         
         let idString = "";
@@ -250,7 +250,7 @@ export default class PrivateRoomUI {
             const btnBg = scene.add.rectangle(kx, ky, 110, 80, isJoin ? 0xffcc00 : (isDel ? 0x050505 : 0x111111)).setInteractive({ useHandCursor: true });
             btnBg.setStrokeStyle(2, isJoin ? 0xffcc00 : 0xff0033);
             
-            const btnTxt = scene.add.text(kx, ky, key, { fontFamily: "Impact, Arial Black", fontSize: "28px", color: isJoin ? "#050505" : "#ff0033" }).setOrigin(0.5);
+            const btnTxt = scene.add.text(kx, ky, key, { fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "28px", color: isJoin ? "#050505" : "#ff0033" }).setOrigin(0.5);
             
             contents.push(btnBg, btnTxt);
 
@@ -331,7 +331,7 @@ export default class PrivateRoomUI {
         mainContainer.add(panel);
 
         const title = scene.add.text(0, -panelH/2 + 65, "SELECT PRIVATE TABLE", {
-            fontFamily: "Impact, Arial Black", fontSize: "48px", color: "#ff0033", stroke: "#330000", strokeThickness: 4, letterSpacing: 3
+            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "48px", color: "#ff0033", stroke: "#330000", strokeThickness: 4, letterSpacing: 3
         }).setOrigin(0.5);
         contents.push(title);
 
@@ -341,7 +341,7 @@ export default class PrivateRoomUI {
         contents.push(subtitle);
 
         const closeBtn = scene.add.text(panelW/2 - 55, -panelH/2 + 60, "X", {
-            fontFamily: "Impact, Arial Black", fontSize: "40px", color: "#ffcc00"
+            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ffcc00"
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
         contents.push(closeBtn);
 
@@ -368,7 +368,7 @@ export default class PrivateRoomUI {
             card.strokeRoundedRect(0, y, viewportW, cardH, 12);
 
             const tableName = scene.add.text(40, y + cardH / 2, t.table_name, {
-                fontFamily: "Impact, Arial Black", fontSize: "32px", color: "#ffcc00", letterSpacing: 2
+                fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: "#ffcc00", letterSpacing: 2
             }).setOrigin(0, 0.5);
 
             const bootChip = scene.add.text(viewportW - 500, y + cardH / 2, `BOOT ${t.boot_amount}`, {
@@ -382,7 +382,7 @@ export default class PrivateRoomUI {
             }).setOrigin(0.5);
 
             const hostText = scene.add.text(viewportW - 100, y + cardH / 2, "HOST", {
-                fontFamily: "Impact, Arial Black", fontSize: "30px", color: "#ff0033"
+                fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "30px", color: "#ff0033"
             }).setOrigin(0.5);
 
             const zone = scene.add.zone(viewportW / 2, y + cardH / 2, viewportW, cardH).setInteractive({ useHandCursor: true });

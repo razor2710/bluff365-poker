@@ -44,7 +44,7 @@ export default class ProgressManager {
 
         // Text
         const text = scene.add.text(0, 0, message, {
-            fontFamily: "Impact, Arial Black",
+            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
             fontSize: "32px",
             color: "#ffcc00",
             letterSpacing: 4

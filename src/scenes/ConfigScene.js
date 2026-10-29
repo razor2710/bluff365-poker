@@ -1,3 +1,4 @@
+// src/scenes/ConfigScene.js
 import Phaser from "phaser";
 import session from "../net/session.js";
 import AlertManager from "../helpers/AlertManager.js";
@@ -70,7 +71,9 @@ export default class ConfigScene extends Phaser.Scene {
 
     session.socket.on("game_tables_response", payload => {
       if (!payload || !payload.success) return;
-      this.tables = Array.isArray(payload.tables) ? payload.tables : [];
+      
+      // FIX: Ensure rawTables is defined before sorting
+      const rawTables = Array.isArray(payload.tables) ? payload.tables : [];
 
       // Sort tables by their database sort_order to exactly match your MongoDB configuration
       this.tables = rawTables.sort((a, b) => Number(a.sort_order || 99) - Number(b.sort_order || 99));
@@ -98,7 +101,7 @@ export default class ConfigScene extends Phaser.Scene {
 
     // 👇 CHANGED TEEN PATTI TO POKER HOLD'EM 👇
     this.add.text(w / 2, 90, "POKER HOLD'EM", {
-      fontFamily: "Impact, Arial Black", fontSize: "64px", color: "#ff0033", letterSpacing: 4
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "64px", color: "#ff0033", letterSpacing: 4
     }).setOrigin(0.5).setShadow(0, 0, "rgba(255,0,51,0.6)", 15, true, true);
     // 👆
 
@@ -107,7 +110,7 @@ export default class ConfigScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     this.backBtn = this.add.text(w - 130, 70, "X", {
-      fontFamily: "Impact, Arial Black", 
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', 
       fontSize: "48px",
       color: "#ffcc00"
     }).setOrigin(0.5);
@@ -295,7 +298,7 @@ export default class ConfigScene extends Phaser.Scene {
     topAccent.fillRoundedRect(cx - 120, cy - cardH / 2 - 4, 240, 8, 4);
 
     const tableName = this.add.text(cx, cy - 140, table.table_name || "Table", {
-      fontFamily: "Impact, Arial Black", fontSize: "52px", color: "#ffffff", letterSpacing: 4
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "52px", color: "#ffffff", letterSpacing: 4
     }).setOrigin(0.5);
     tableName.setShadow(0, 0, "#" + theme.border.toString(16).padStart(6, '0'), 15, true, true);
 
@@ -304,7 +307,7 @@ export default class ConfigScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const potValue = this.add.text(cx, cy + 20, this.formatAmount(table.pot_limit), {
-      fontFamily: "Impact, Arial Black", fontSize: "96px", color: "#ffffff"
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "96px", color: "#ffffff"
     }).setOrigin(0.5);
     potValue.setShadow(4, 4, "#000000", 0, true, true);
 
@@ -319,7 +322,7 @@ export default class ConfigScene extends Phaser.Scene {
     bootBar.strokeRoundedRect(cx - 250, cy + 160, 500, 70, 12);
 
     const bootText = this.add.text(cx, cy + 195, `BOOT: ${this.formatAmount(table.boot_amount)}`, {
-      fontFamily: "Impact, Arial Black", fontSize: "32px", color: "#ffffff", letterSpacing: 2
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: "#ffffff", letterSpacing: 2
     }).setOrigin(0.5);
 
     const clickZone = this.add.zone(cx - cardW / 2, cy - cardH / 2, cardW, cardH).setOrigin(0).setInteractive({ useHandCursor: true });
@@ -372,7 +375,7 @@ export default class ConfigScene extends Phaser.Scene {
     bg.strokeCircle(x, y, 46);
 
     const label = this.add.text(x, y, text, {
-      fontFamily: "Impact, Arial Black", fontSize: "46px", color: "#ffcc00"
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "46px", color: "#ffcc00"
     }).setOrigin(0.5);
 
     const zone = this.add.zone(x - 46, y - 46, 92, 92).setOrigin(0).setInteractive({ useHandCursor: true });
@@ -421,7 +424,7 @@ export default class ConfigScene extends Phaser.Scene {
     mainContainer.add(panel);
 
     const title = this.add.text(0, -panelH/2 + 45, table.table_name || "Table", {
-      fontFamily: "Impact, Arial Black", fontSize: "40px", color: "#ff0033", letterSpacing: 2
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033", letterSpacing: 2
     }).setOrigin(0.5);
     contents.push(title);
 
@@ -431,7 +434,7 @@ export default class ConfigScene extends Phaser.Scene {
     contents.push(subtitle);
 
     const close = this.add.text(panelW/2 - 45, -panelH/2 + 40, "X", {
-      fontFamily: "Impact, Arial Black", fontSize: "40px", color: "#ffcc00"
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ffcc00"
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     
     close.on('pointerover', () => close.setColor("#ff0033"));
@@ -455,7 +458,7 @@ export default class ConfigScene extends Phaser.Scene {
       rowBg.strokeRoundedRect(-panelW/2 + 30, y - 28, panelW - 60, 56, 12);
 
       const cityName = this.add.text(-panelW/2 + 50, y, city.city_name || `City ${idx + 1}`, {
-        fontFamily: "Impact, Arial Black", fontSize: "28px", color: "#ffffff", letterSpacing: 1
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "28px", color: "#ffffff", letterSpacing: 1
       }).setOrigin(0, 0.5);
 
       const activeText = this.add.text(-panelW/2 + 420, y, `Players ${Number(city.active_players || 0)}/5`, {
@@ -470,7 +473,7 @@ export default class ConfigScene extends Phaser.Scene {
       const stateColor = city.is_match_running ? "#00ff88" : "#ffcc00";
 
       const runningText = this.add.text(-panelW/2 + 940, y, stateText, {
-        fontFamily: "Impact, Arial Black", fontSize: "22px", color: stateColor
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "22px", color: stateColor
       }).setOrigin(0.5);
 
       const btnW = 150, btnH = 48, btnX = panelW/2 - 190;
@@ -481,7 +484,7 @@ export default class ConfigScene extends Phaser.Scene {
       joinBg.strokeRoundedRect(btnX, y - btnH/2, btnW, btnH, 8);
 
       const joinText = this.add.text(btnX + btnW/2, y, "JOIN", {
-        fontFamily: "Impact, Arial Black", fontSize: "24px", color: "#ffcc00", letterSpacing: 1
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "24px", color: "#ffcc00", letterSpacing: 1
       }).setOrigin(0.5);
 
       const joinZone = this.add.zone(btnX, y - btnH/2, btnW, btnH).setOrigin(0).setInteractive({ useHandCursor: true });
@@ -572,7 +575,7 @@ export default class ConfigScene extends Phaser.Scene {
     mainContainer.add(panel);
 
     const title = this.add.text(0, -130, "MATCH IN PROGRESS", {
-      fontFamily: "Impact, Arial Black", fontSize: "42px", color: "#ffcc00", letterSpacing: 2
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "42px", color: "#ffcc00", letterSpacing: 2
     }).setOrigin(0.5);
     contents.push(title);
 
@@ -593,7 +596,7 @@ export default class ConfigScene extends Phaser.Scene {
     cancelBg.strokeRoundedRect(-130, 100, 260, 65, 8);
 
     const cancelText = this.add.text(0, 132, "CANCEL", {
-      fontFamily: "Impact, Arial Black", fontSize: "28px", color: "#ff0033", letterSpacing: 2
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "28px", color: "#ff0033", letterSpacing: 2
     }).setOrigin(0.5);
 
     const cancelZone = this.add.zone(-130, 100, 260, 65).setOrigin(0).setInteractive({ useHandCursor: true });

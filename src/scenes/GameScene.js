@@ -179,7 +179,7 @@ export default class GameScene extends Phaser.Scene {
     const nameParts = displayCityName.toUpperCase().split(" ");
     this.add
       .text(w * 0.38, 250, nameParts[0] || "PRIVATE", {
-        fontFamily: "Arial Black, Impact",
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
         fontSize: "28px",
         color: themeStyles.primaryColor,
         stroke: themeStyles.strokeColor,
@@ -191,7 +191,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.add
       .text(w * 0.62, 250, nameParts.slice(1).join(" ") || "ROOM", {
-        fontFamily: "Arial Black, Impact",
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
         fontSize: "28px",
         color: themeStyles.secondaryColor,
         stroke: themeStyles.strokeColor,
@@ -218,7 +218,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.add
       .text(exitX, exitY, "EXIT", {
-        fontFamily: "Impact, Arial Black",
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
         fontSize: "24px",
         color: "#ff0033",
         letterSpacing: 2
@@ -228,7 +228,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.sessionIdText = this.add
       .text(w / 2, h * 0.5, this.sessionId || "", {
-        fontFamily: "Arial Black",
+        fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
         fontSize: "22px",
         color: "#ffffff",
         stroke: "#000000",
@@ -239,7 +239,7 @@ export default class GameScene extends Phaser.Scene {
 
     this.betInfoText = this.add
       .text(w / 2.5 - 520, 60, "", {
-        fontFamily: "Arial Black",
+        fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
         fontSize: "28px",
         color: "#ffffff",
         stroke: "#000000",
@@ -711,7 +711,7 @@ export default class GameScene extends Phaser.Scene {
     // 4. Crisp Label Text
     const textObj = this.add
       .text(0, -2, label, {
-        fontFamily: "Impact, Arial Black",
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
         fontSize: "24px",
         color: textColor,
         letterSpacing: 1.8,
@@ -738,7 +738,7 @@ export default class GameScene extends Phaser.Scene {
     };
 
     // Make buttons touch-friendly on Android
-hitZone.on("pointerdown", () => {
+    hitZone.on("pointerdown", () => {
       if (!container.isEnabled) return;
       
       // 1. FIRE THE CLICK ACTION INSTANTLY! (This fixes the mobile touch bug)
@@ -1040,7 +1040,7 @@ hitZone.on("pointerdown", () => {
 
     this.raiseAmountTextUI = this.add
       .text(0, -towerH / 2 + 62, "0", {
-        fontFamily: "Impact, Arial Black",
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
         fontSize: "28px",
         color: "#ffffff",
         letterSpacing: 1.5,
@@ -1115,7 +1115,7 @@ hitZone.on("pointerdown", () => {
       sBg.lineStyle(2, 0xffcc00, 0.9).strokeCircle(0, 0, 18);
       const sTxt = this.add
         .text(0, -1, symbol, {
-          fontFamily: "Arial Black",
+          fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "20px",
           color: "#ffcc00"
         })
@@ -1176,7 +1176,7 @@ hitZone.on("pointerdown", () => {
 
       const pTxt = this.add
         .text(0, 0, pr.label, {
-          fontFamily: "Impact, Arial Black",
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
           fontSize: "16px",
           color: "#ffffff",
           letterSpacing: 1,
@@ -1232,7 +1232,7 @@ hitZone.on("pointerdown", () => {
 
       const bTxt = this.add
         .text(0, 0, labelText, {
-          fontFamily: "Impact, Arial Black",
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
           fontSize: "21px",
           color: textColor,
           letterSpacing: 1.5,
@@ -1255,13 +1255,14 @@ hitZone.on("pointerdown", () => {
         this.tweens.add({ targets: bCont, scaleX: 1, scaleY: 1, duration: 130 });
       });
       bZone.on("pointerdown", () => {
+        if (onTrigger) onTrigger(); // <--- FIRE INSTANTLY FOR MOBILE
+        
         this.tweens.add({
           targets: bCont,
           scaleX: 0.93,
           scaleY: 0.93,
           duration: 70,
-          yoyo: true,
-          onComplete: onTrigger
+          yoyo: true
         });
       });
 
@@ -1401,7 +1402,7 @@ hitZone.on("pointerdown", () => {
     const coinIcon = this.add.circle(-width / 2 + 14, 0, 6, 0xffcc00);
     const text = this.add
       .text(6, 0, Number(initialCoins || 0).toLocaleString(), {
-        fontFamily: "Arial Black",
+        fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
         fontSize: "14px",
         color: "#ffd700",
         stroke: "#000000",
@@ -1463,7 +1464,7 @@ hitZone.on("pointerdown", () => {
       // 2. Name Text placed below Balance Pill
       const nameText = this.add
         .text(seatPositions[0].x, seatPositions[0].y + 104, selfPlayer.username, {
-          fontFamily: "Arial Black",
+          fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "21px",
           color: "#ffffff",
           stroke: "#000000",
@@ -1544,7 +1545,7 @@ hitZone.on("pointerdown", () => {
           pos.y + nameDist * Math.sin(outwardRad),
           p.username,
           {
-            fontFamily: "Arial Black",
+            fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
             fontSize: "19px",
             color: "#ffffff",
             stroke: "#000000",
@@ -1693,7 +1694,7 @@ hitZone.on("pointerdown", () => {
               ">
                   <h1 style="
                       margin: 0 0 15px 0;
-                      font-family: 'Impact', 'Arial Black', sans-serif;
+                      font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
                       font-size: 34px;
                       color: #ff0033;
                       letter-spacing: 3px;
@@ -1717,7 +1718,7 @@ hitZone.on("pointerdown", () => {
                           background: rgba(255, 0, 51, 0.05); 
                           border: 1px solid #ff0033;
                           padding: 10px 30px;
-                          font-family: 'Impact', sans-serif;
+                          font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
                           font-size: 18px;
                           color: #ff0033;
                           letter-spacing: 2px;
@@ -1733,7 +1734,7 @@ hitZone.on("pointerdown", () => {
                           background: rgba(255, 204, 0, 0.05); 
                           border: 1px solid #ffcc00;
                           padding: 10px 30px;
-                          font-family: 'Impact', sans-serif;
+                          font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
                           font-size: 18px;
                           color: #ffcc00;
                           letter-spacing: 2px;
@@ -1863,7 +1864,7 @@ hitZone.on("pointerdown", () => {
               ">
                   <h1 style="
                       margin: 0 0 20px 0;
-                      font-family: 'Impact', 'Arial Black', sans-serif;
+                      font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
                       font-size: 38px;
                       color: #ffcc00;
                       letter-spacing: 3px;
@@ -1884,7 +1885,7 @@ hitZone.on("pointerdown", () => {
                       background: rgba(255, 204, 0, 0.05); 
                       border: 1px solid #ffcc00;
                       padding: 10px 40px;
-                      font-family: 'Impact', sans-serif;
+                      font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
                       font-size: 20px;
                       color: #ffcc00;
                       letter-spacing: 2px;
@@ -1982,7 +1983,7 @@ hitZone.on("pointerdown", () => {
       const dim = this.add.rectangle(w / 2, h / 2 - 20, 500, 220, 0x000000, 0.8).setDepth(2000);
       const title = this.add
         .text(w / 2, h / 2 - 80, "", {
-          fontFamily: "Arial Black",
+          fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "28px",
           color: "#ffd700",
           stroke: "#000000",
@@ -1992,7 +1993,7 @@ hitZone.on("pointerdown", () => {
         .setDepth(2001);
       const body = this.add
         .text(w / 2, h / 2 - 20, "", {
-          fontFamily: "Arial Black",
+          fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "32px",
           color: "#ffffff",
           align: "center",
@@ -2013,7 +2014,7 @@ hitZone.on("pointerdown", () => {
 
       const startBtn = this.add
         .text(w / 2, h / 2 + 80, "START GAME", {
-          fontFamily: "Arial Black",
+          fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "24px",
           color: "#44ff44",
           stroke: "#000000",
@@ -2360,7 +2361,7 @@ hitZone.on("pointerdown", () => {
       } else if (!pv.statusBadge) {
         pv.statusBadge = this.add
           .text(badgeX, badgeY, labelText, {
-            fontFamily: "Arial Black",
+            fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
             fontSize: "13px",
             color: badgeColor,
             stroke: "#000000",
@@ -2403,7 +2404,7 @@ hitZone.on("pointerdown", () => {
       } else if (!pv.roleBadge) {
         pv.roleBadge = this.add
           .text(roleX, roleY, roleText, {
-            fontFamily: "Arial Black",
+            fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
             fontSize: "13px",
             color: "#050505",
             backgroundColor: "#ffcc00",
@@ -2527,7 +2528,7 @@ hitZone.on("pointerdown", () => {
 
     const title = this.add
       .text(w / 2, (h - 180) / 2 + 50, "CONNECTION LOST", {
-        fontFamily: "Arial Black",
+        fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
         fontSize: "30px",
         color: "#ffd700",
         stroke: "#000000",
