@@ -738,8 +738,12 @@ export default class GameScene extends Phaser.Scene {
     };
 
     // Make buttons touch-friendly on Android
-    hitZone.on("pointerdown", () => {
+hitZone.on("pointerdown", () => {
       if (!container.isEnabled) return;
+      
+      // 1. FIRE THE CLICK ACTION INSTANTLY! (This fixes the mobile touch bug)
+      if (onClick) onClick();
+      
       drawBg(true, true);
       triggerShimmerSweep();
 
@@ -771,7 +775,6 @@ export default class GameScene extends Phaser.Scene {
           container.setScale(1);
           container.y = container.baseY;
           drawBg(false, false);
-          if (onClick) onClick();
         }
       });
     });
