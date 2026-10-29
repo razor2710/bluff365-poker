@@ -185,7 +185,7 @@ export default class SplashScene extends Phaser.Scene {
         }).setOrigin(0.5).setAlpha(0);
 
         this.gameTitle = this.add.text(this.centerX, this.centerY + 20, 'POKER HOLD\'EM', {
-            fontFamily: '"Impact", sans-serif', 
+            fontFamily: '"Impact", "Arial Black", "sans-serif-black", sans-serif',
             fontSize: '80px', 
             color: '#0a0000' 
         }).setOrigin(0.5).setScale(1.3).setAlpha(0);
