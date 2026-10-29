@@ -137,8 +137,8 @@ export default class LobbyScene extends Phaser.Scene {
     // ==========================================
     // CENTER TITLE & GLITCH ANIMATION
     // ==========================================
-    this.gameTitle = this.add.text(w / 2, h * 0.26, "POKER HOLD'EM", {
-      fontFamily: "Impact, Arial Black", fontSize: "120px", color: "#ff0033", stroke: "#330000", strokeThickness: 8, letterSpacing: 8
+   this.gameTitle = this.add.text(w / 2, h * 0.26, "POKER HOLD'EM", {
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "120px", color: "#ff0033", stroke: "#330000", strokeThickness: 8, letterSpacing: 8
     }).setOrigin(0.5).setShadow(0, 0, "rgba(255,0,51,0.6)", 25, true, true);
 
     this.add.text(w / 2, h * 0.35, "PLAY • WIN • DOMINATE", { 
@@ -398,8 +398,8 @@ export default class LobbyScene extends Phaser.Scene {
       panel.strokeRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 20);
       mainContainer.add(panel);
 
-      const titleText = this.add.text(0, -140, "MATCH IN PROGRESS", {
-          fontFamily: "Impact, Arial Black", fontSize: "40px", color: "#ff0033", letterSpacing: 2
+     const titleText = this.add.text(0, -140, "MATCH IN PROGRESS", {
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033", letterSpacing: 2
       }).setOrigin(0.5);
 
       const infoText = this.add.text(0, -20, 
@@ -410,15 +410,15 @@ export default class LobbyScene extends Phaser.Scene {
       const rejoinBg = this.add.graphics();
       rejoinBg.fillStyle(0xffcc00, 1).fillRoundedRect(-280, 100, 240, 70, 12);
       const rejoinBtn = this.add.text(-160, 135, "REJOIN", {
-          fontFamily: "Impact, Arial Black", fontSize: "31px", color: "#050505"
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "31px", color: "#050505"
       }).setOrigin(0.5);
       const rejoinZone = this.add.zone(-280, 100, 240, 70).setOrigin(0).setInteractive({ useHandCursor: true });
 
       const dismissBg = this.add.graphics();
       dismissBg.fillStyle(0x050505, 1).fillRoundedRect(40, 100, 240, 70, 12);
       dismissBg.lineStyle(2, 0xff0033, 1).strokeRoundedRect(40, 100, 240, 70, 12);
-      const dismissBtn = this.add.text(160, 135, "DISMISS", {
-          fontFamily: "Impact, Arial Black", fontSize: "31px", color: "#ff0033"
+    const dismissBtn = this.add.text(160, 135, "DISMISS", {
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "31px", color: "#ff0033"
       }).setOrigin(0.5);
       const dismissZone = this.add.zone(40, 100, 240, 70).setOrigin(0).setInteractive({ useHandCursor: true });
 
@@ -516,13 +516,13 @@ export default class LobbyScene extends Phaser.Scene {
     panel.strokeRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 24);
     mainContainer.add(panel);
 
-    const title = this.add.text(0, -panelH/2 + 65, "MATCH HISTORY", {
-        fontFamily: "Impact, Arial Black", fontSize: "46px", color: "#ffcc00", letterSpacing: 3
+   const title = this.add.text(0, -panelH/2 + 65, "MATCH HISTORY", {
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "46px", color: "#ffcc00", letterSpacing: 3
     }).setOrigin(0.5);
     contents.push(title);
 
-    const closeBtn = this.add.text(panelW/2 - 50, -panelH/2 + 50, "X", {
-        fontFamily: "Impact, Arial Black", fontSize: "40px", color: "#ff0033"
+ const closeBtn = this.add.text(panelW/2 - 50, -panelH/2 + 50, "X", {
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033"
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     
     closeBtn.on('pointerover', () => closeBtn.setScale(1.2));
@@ -573,15 +573,15 @@ export default class LobbyScene extends Phaser.Scene {
         }).setOrigin(1, 0);
 
         const t3 = this.add.text(26, y + 75, isWin ? "VICTORY" : "DEFEAT", {
-            fontFamily: "Impact, Arial Black", fontSize: "32px", color: textColor, letterSpacing: 2
+            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor, letterSpacing: 2
         });
 
         const t4 = this.add.text(listW / 2, y + 75, `Pot: ${match.pot || 0} | Inv: ${match.invested || 0}`, {
             fontFamily: "Courier New", fontSize: "24px", color: "#ffcc00", fontWeight: 'bold'
         }).setOrigin(0.5, 0);
 
-        const t5 = this.add.text(listW - 26, y + 75, `${isWin ? "+" : "-"}${Math.abs(match.netChange || 0)}`, {
-            fontFamily: "Impact, Arial Black", fontSize: "32px", color: textColor
+       const t5 = this.add.text(listW - 26, y + 75, `${isWin ? "+" : "-"}${Math.abs(match.netChange || 0)}`, {
+            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor
         }).setOrigin(1, 0);
 
         content.add([row, t1, t2, t3, t4, t5]);
@@ -699,7 +699,7 @@ export default class LobbyScene extends Phaser.Scene {
     mainContainer.add(panel);
 
     const title = this.add.text(0, -35, "CONNECTION LOST", {
-        fontFamily: "Impact, Arial Black", fontSize: "42px", color: "#ff0033", letterSpacing: 2
+        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "42px", color: "#ff0033", letterSpacing: 2
     }).setOrigin(0.5);
 
     const msg = this.add.text(0, 35, "REESTABLISHING SECURE LINK...", {
