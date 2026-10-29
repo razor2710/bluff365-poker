@@ -12,6 +12,25 @@ export default class GameScene extends Phaser.Scene {
     this.lastMoveId = null;
   }
 
+  // Fast helper: prevents expensive Canvas2D rasterization & WebGL texture uploads when text hasn't changed
+  setTextSafe(textObj, newText) {
+    if (!textObj) return;
+    const str = String(newText ?? "");
+    if (textObj._cachedText !== str) {
+      textObj._cachedText = str;
+      textObj.setText(str);
+    }
+  }
+
+  // Fast helper: prevents unnecessary style recalculations when color hasn't changed
+  setColorSafe(textObj, newColor) {
+    if (!textObj) return;
+    if (textObj._cachedColor !== newColor) {
+      textObj._cachedColor = newColor;
+      textObj.setColor(newColor);
+    }
+  }
+
   init(data) {
     if (!data || !data.username || !session || !session.flowGuard?.startedFromSplash) {
       this.scene.start("SplashScene");
@@ -78,6 +97,8 @@ export default class GameScene extends Phaser.Scene {
     this.minRaiseTarget = 0;
     this.maxRaiseTarget = 0;
     this.currentRaiseTarget = 0;
+    this._sliderForceRedraw = false;
+    this._lastTimerStateKey = "";
   }
 
   create() {
@@ -148,25 +169,25 @@ export default class GameScene extends Phaser.Scene {
       strokeColor: "#000000",
       strokeThickness: 5,
       shadowColor: "#000000",
-      shadowBlur: 8,
+      shadowBlur: 0,
       nameColor: "#00ffff"
     };
 
     if (lowerTableName.includes("bronze")) {
       chosenBgKey = "table_bg_bronze";
-      themeStyles = { primaryColor: "#ff9d63", secondaryColor: "#ffffff", strokeColor: "#2a1205", strokeThickness: 6, shadowColor: "#140701", shadowBlur: 10, nameColor: "#ffbe94" };
+      themeStyles = { primaryColor: "#ff9d63", secondaryColor: "#ffffff", strokeColor: "#2a1205", strokeThickness: 6, shadowColor: "#140701", shadowBlur: 0, nameColor: "#ffbe94" };
     } else if (lowerTableName.includes("silver")) {
       chosenBgKey = "table_bg_silver";
-      themeStyles = { primaryColor: "#e2ebf5", secondaryColor: "#a3b2c2", strokeColor: "#1b222b", strokeThickness: 6, shadowColor: "#090d12", shadowBlur: 10, nameColor: "#e6f2ff" };
+      themeStyles = { primaryColor: "#e2ebf5", secondaryColor: "#a3b2c2", strokeColor: "#1b222b", strokeThickness: 6, shadowColor: "#090d12", shadowBlur: 0, nameColor: "#e6f2ff" };
     } else if (lowerTableName.includes("gold")) {
       chosenBgKey = "table_bg_gold";
-      themeStyles = { primaryColor: "#ffea75", secondaryColor: "#ffffff", strokeColor: "#4a3200", strokeThickness: 7, shadowColor: "#211600", shadowBlur: 14, nameColor: "#fff2a3" };
+      themeStyles = { primaryColor: "#ffea75", secondaryColor: "#ffffff", strokeColor: "#4a3200", strokeThickness: 7, shadowColor: "#211600", shadowBlur: 0, nameColor: "#fff2a3" };
     } else if (lowerTableName.includes("platinum")) {
       chosenBgKey = "table_bg_platinum";
-      themeStyles = { primaryColor: "#7be0ff", secondaryColor: "#ffffff", strokeColor: "#0f202e", strokeThickness: 6, shadowColor: "#03080c", shadowBlur: 12, nameColor: "#a3f0ff" };
+      themeStyles = { primaryColor: "#7be0ff", secondaryColor: "#ffffff", strokeColor: "#0f202e", strokeThickness: 6, shadowColor: "#03080c", shadowBlur: 0, nameColor: "#a3f0ff" };
     } else if (lowerTableName.includes("diamond")) {
       chosenBgKey = "table_bg_diamond";
-      themeStyles = { primaryColor: "#df8eff", secondaryColor: "#a9ffff", strokeColor: "#1d0036", strokeThickness: 7, shadowColor: "#000000", shadowBlur: 16, nameColor: "#f3d1ff" };
+      themeStyles = { primaryColor: "#df8eff", secondaryColor: "#a9ffff", strokeColor: "#1d0036", strokeThickness: 7, shadowColor: "#000000", shadowBlur: 0, nameColor: "#f3d1ff" };
     }
 
     this.roomBgImage = this.add.image(w / 2, h / 2, chosenBgKey).setDisplaySize(w, h);
@@ -223,8 +244,7 @@ export default class GameScene extends Phaser.Scene {
         color: "#ff0033",
         letterSpacing: 2
       })
-      .setOrigin(0.5)
-      .setShadow(0, 0, "rgba(255,0,51,0.6)", 12, false, true);
+      .setOrigin(0.5);
 
     this.sessionIdText = this.add
       .text(w / 2, h * 0.5, this.sessionId || "", {
@@ -236,6 +256,7 @@ export default class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setAlpha(0.2);
+    this.sessionIdText._cachedText = this.sessionId || "";
 
     this.betInfoText = this.add
       .text(w / 2.5 - 520, 60, "", {
@@ -246,6 +267,7 @@ export default class GameScene extends Phaser.Scene {
         strokeThickness: 5
       })
       .setOrigin(0.5);
+    this.betInfoText._cachedText = "";
 
     this.phaseInfoText = this.add
       .text(w / 2, h * 0.29, "", {
@@ -257,6 +279,7 @@ export default class GameScene extends Phaser.Scene {
         strokeThickness: 4
       })
       .setOrigin(0.5);
+    this.phaseInfoText._cachedText = "";
 
     this.dealerX = w / 2;
     this.dealerY = h * 0.14;
@@ -328,7 +351,7 @@ export default class GameScene extends Phaser.Scene {
       this.currentPhase = payload.phase || "preflop";
       this.turnTime = payload.turnTime ?? 25;
       this.remainingTime = this.turnTime;
-      if (this.sessionIdText) this.sessionIdText.setText(this.sessionId);
+      if (this.sessionIdText) this.setTextSafe(this.sessionIdText, this.sessionId);
 
       this.privateHoleCards = payload.cards || [];
       this.lastMoveId = null;
@@ -642,9 +665,13 @@ export default class GameScene extends Phaser.Scene {
     aura.fillRoundedRect(-width / 2 - 8, -height / 2 - 8, width + 16, height + 16, 22);
     aura.setAlpha(0);
 
-    // 2. Multi-Layered Luxury Beveled Body
+    // 2. Multi-Layered Luxury Beveled Body (Cached by state to prevent mobile GPU lag)
     const bg = this.add.graphics();
     const drawBg = (isHovered = false, isPressed = false) => {
+      const stateKey = `${isHovered ? 1 : 0}_${isPressed ? 1 : 0}`;
+      if (container._bgStateKey === stateKey) return;
+      container._bgStateKey = stateKey;
+
       bg.clear();
 
       // Drop shadow
@@ -708,7 +735,7 @@ export default class GameScene extends Phaser.Scene {
     shimmer.x = -width / 2 - 30;
     shimmer.setAlpha(0);
 
-    // 4. Crisp Label Text
+    // 4. Crisp Label Text (Zero blur shadow for instant Canvas2D rasterization on Android)
     const textObj = this.add
       .text(0, -2, label, {
         fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
@@ -719,8 +746,14 @@ export default class GameScene extends Phaser.Scene {
         strokeThickness: 5,
         align: "center"
       })
-      .setOrigin(0.5)
-      .setShadow(0, 2, "#000000", 6, true, true);
+      .setOrigin(0.5);
+    textObj._cachedText = label;
+
+    // 5. Reusable Shockwave Ripple (Pre-created once instead of allocated on click)
+    const ripple = this.add.graphics();
+    ripple.lineStyle(3, strokeHex, 1);
+    ripple.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
+    ripple.setAlpha(0);
 
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5);
 
@@ -740,26 +773,23 @@ export default class GameScene extends Phaser.Scene {
     // Make buttons touch-friendly on Android
     hitZone.on("pointerdown", () => {
       if (!container.isEnabled) return;
-      
+
       // 1. FIRE THE CLICK ACTION INSTANTLY! (This fixes the mobile touch bug)
       if (onClick) onClick();
-      
+
       drawBg(true, true);
       triggerShimmerSweep();
 
-      // Shockwave Ripple Effect
-      const ripple = this.add.graphics();
-      ripple.lineStyle(3, strokeHex, 1);
-      ripple.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
-      container.addAt(ripple, 0);
+      // Reuse pre-built Shockwave Ripple Effect
+      this.tweens.killTweensOf(ripple);
+      ripple.setScale(1).setAlpha(1);
       this.tweens.add({
         targets: ripple,
         scaleX: 1.25,
         scaleY: 1.38,
         alpha: 0,
         duration: 320,
-        ease: "Cubic.easeOut",
-        onComplete: () => ripple.destroy()
+        ease: "Cubic.easeOut"
       });
 
       this.tweens.killTweensOf(container);
@@ -779,8 +809,10 @@ export default class GameScene extends Phaser.Scene {
       });
     });
 
-    hitZone.on("pointerover", () => {
+    hitZone.on("pointerover", pointer => {
       if (!container.isEnabled) return;
+      // Skip hover animations on mobile touch so tap doesn't double-draw
+      if (pointer && pointer.wasTouch) return;
       drawBg(true, false);
       triggerShimmerSweep();
       this.tweens.killTweensOf(container);
@@ -801,7 +833,11 @@ export default class GameScene extends Phaser.Scene {
       });
     });
 
-    hitZone.on("pointerout", () => {
+    hitZone.on("pointerout", pointer => {
+      if (pointer && pointer.wasTouch) {
+        drawBg(false, false);
+        return;
+      }
       drawBg(false, false);
       this.tweens.killTweensOf(container);
       this.tweens.add({
@@ -821,35 +857,33 @@ export default class GameScene extends Phaser.Scene {
       });
     });
 
-    container.add([aura, bg, shimmer, textObj, hitZone]);
+    container.add([ripple, aura, bg, shimmer, textObj, hitZone]);
     container.textObj = textObj;
     container.hitZone = hitZone;
-    container.isEnabled = false;
+    container.isEnabled = null; // null forces initial state setup once
     container.pulseTween = null;
 
     container.setButtonEnabled = enabled => {
       const nextState = Boolean(enabled);
-      const changed = container.isEnabled !== nextState;
+      if (container.isEnabled === nextState) return; // CRITICAL ANDROID FPS FIX: skip if unchanged!
       container.isEnabled = nextState;
 
       if (nextState) {
         container.setAlpha(1);
         hitZone.setInteractive({ useHandCursor: true });
-        if (changed) {
-          drawBg(false, false);
-          if (container.pulseTween) container.pulseTween.stop();
-          aura.setAlpha(0.25);
-          container.pulseTween = this.tweens.add({
-            targets: aura,
-            alpha: { from: 0.18, to: 0.65 },
-            scaleX: { from: 0.98, to: 1.04 },
-            scaleY: { from: 0.98, to: 1.06 },
-            duration: 850,
-            yoyo: true,
-            repeat: -1,
-            ease: "Sine.easeInOut"
-          });
-        }
+        drawBg(false, false);
+        if (container.pulseTween) container.pulseTween.stop();
+        aura.setAlpha(0.25);
+        container.pulseTween = this.tweens.add({
+          targets: aura,
+          alpha: { from: 0.18, to: 0.65 },
+          scaleX: { from: 0.98, to: 1.04 },
+          scaleY: { from: 0.98, to: 1.06 },
+          duration: 850,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut"
+        });
       } else {
         if (container.pulseTween) {
           container.pulseTween.stop();
@@ -866,7 +900,7 @@ export default class GameScene extends Phaser.Scene {
     };
 
     container.setLabel = str => {
-      textObj.setText(str);
+      this.setTextSafe(textObj, str);
     };
 
     return container;
@@ -959,6 +993,7 @@ export default class GameScene extends Phaser.Scene {
           this.sendAction("all_in");
         } else {
           this.isRaising = true;
+          this._sliderForceRedraw = true;
           this.setSliderTargetBet(this.minRaiseTarget);
           this.updateTurnUI();
           this.animateRaiseTowerIn();
@@ -1037,6 +1072,7 @@ export default class GameScene extends Phaser.Scene {
         letterSpacing: 2
       })
       .setOrigin(0.5);
+    this.raiseHeaderLabel._cachedText = "RAISE TO";
 
     this.raiseAmountTextUI = this.add
       .text(0, -towerH / 2 + 62, "0", {
@@ -1048,6 +1084,7 @@ export default class GameScene extends Phaser.Scene {
         strokeThickness: 4
       })
       .setOrigin(0.5);
+    this.raiseAmountTextUI._cachedText = "0";
     this.raiseContainer.add([this.raiseHeaderLabel, this.raiseAmountTextUI]);
 
     // 2. Vertical Slider Track & Tick Marks
@@ -1097,14 +1134,16 @@ export default class GameScene extends Phaser.Scene {
     this.input.setDraggable(this.raiseThumb);
     this.raiseContainer.add([this.raiseThumbGlow, this.raiseThumb]);
 
-    this.tweens.add({
+    // Paused by default while raiseContainer is hidden to save CPU/GPU
+    this.raiseThumbGlowTween = this.tweens.add({
       targets: this.raiseThumbGlow,
       scaleX: { from: 0.9, to: 1.25 },
       scaleY: { from: 0.9, to: 1.25 },
       alpha: { from: 0.45, to: 0.15 },
       duration: 700,
       yoyo: true,
-      repeat: -1
+      repeat: -1,
+      paused: true
     });
 
     // + and - Fine-Tune Step Buttons at Top & Bottom of Track
@@ -1125,7 +1164,10 @@ export default class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
 
-      sZone.on("pointerover", () => sContainer.setScale(1.12));
+      sZone.on("pointerover", pointer => {
+        if (pointer && pointer.wasTouch) return;
+        sContainer.setScale(1.12);
+      });
       sZone.on("pointerout", () => sContainer.setScale(1));
       sZone.on("pointerdown", () => {
         if (this.sndClick) this.sndClick.play();
@@ -1166,6 +1208,8 @@ export default class GameScene extends Phaser.Scene {
       const pH = 42;
       const pBg = this.add.graphics();
       const drawPreset = hovered => {
+        if (pContainer._hovered === hovered) return;
+        pContainer._hovered = hovered;
         pBg.clear();
         pBg.fillStyle(hovered ? pr.color : 0x12121a, hovered ? 0.28 : 0.95);
         pBg.fillRoundedRect(-pW / 2, -pH / 2, pW, pH, 10);
@@ -1190,11 +1234,13 @@ export default class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
 
-      pZone.on("pointerover", () => {
+      pZone.on("pointerover", pointer => {
+        if (pointer && pointer.wasTouch) return;
         drawPreset(true);
         this.tweens.add({ targets: pContainer, scaleX: 1.07, scaleY: 1.07, duration: 120 });
       });
-      pZone.on("pointerout", () => {
+      pZone.on("pointerout", pointer => {
+        if (pointer && pointer.wasTouch) return;
         drawPreset(false);
         this.tweens.add({ targets: pContainer, scaleX: 1, scaleY: 1, duration: 120 });
       });
@@ -1220,6 +1266,8 @@ export default class GameScene extends Phaser.Scene {
       const bWidth = towerW - 26;
       const bGfx = this.add.graphics();
       const drawBtn = hovered => {
+        if (bCont._hovered === hovered) return;
+        bCont._hovered = hovered;
         bGfx.clear();
         bGfx.fillStyle(fillHex, hovered ? 1 : 0.9);
         bGfx.fillRoundedRect(-bWidth / 2, -bHeight / 2, bWidth, bHeight, 12);
@@ -1246,17 +1294,19 @@ export default class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
 
-      bZone.on("pointerover", () => {
+      bZone.on("pointerover", pointer => {
+        if (pointer && pointer.wasTouch) return;
         drawBtn(true);
         this.tweens.add({ targets: bCont, scaleX: 1.05, scaleY: 1.05, duration: 130 });
       });
-      bZone.on("pointerout", () => {
+      bZone.on("pointerout", pointer => {
+        if (pointer && pointer.wasTouch) return;
         drawBtn(false);
         this.tweens.add({ targets: bCont, scaleX: 1, scaleY: 1, duration: 130 });
       });
       bZone.on("pointerdown", () => {
         if (onTrigger) onTrigger(); // <--- FIRE INSTANTLY FOR MOBILE
-        
+
         this.tweens.add({
           targets: bCont,
           scaleX: 0.93,
@@ -1331,6 +1381,9 @@ export default class GameScene extends Phaser.Scene {
     if (!this.raiseContainer) return;
     this.tweens.killTweensOf(this.raiseContainer);
     this.raiseContainer.setVisible(true);
+    if (this.raiseThumbGlowTween && this.raiseThumbGlowTween.isPaused()) {
+      this.raiseThumbGlowTween.resume();
+    }
     this.raiseContainer.x = this.raiseTowerBaseX + 180;
     this.raiseContainer.setAlpha(0);
     this.raiseContainer.setScale(0.9);
@@ -1355,7 +1408,22 @@ export default class GameScene extends Phaser.Scene {
 
     let snapped = Math.round(targetBetAmount / snapUnit) * snapUnit;
     if (targetBetAmount >= this.maxRaiseTarget) snapped = this.maxRaiseTarget;
-    this.currentRaiseTarget = Phaser.Math.Clamp(snapped, this.minRaiseTarget, this.maxRaiseTarget);
+    const clampedTarget = Phaser.Math.Clamp(snapped, this.minRaiseTarget, this.maxRaiseTarget);
+
+    // Skip expensive text/graphics redraws during touch drag if snapped value hasn't changed
+    if (
+      !this._sliderForceRedraw &&
+      this.currentRaiseTarget === clampedTarget &&
+      this._lastSliderMin === this.minRaiseTarget &&
+      this._lastSliderMax === this.maxRaiseTarget
+    ) {
+      return;
+    }
+
+    this._sliderForceRedraw = false;
+    this._lastSliderMin = this.minRaiseTarget;
+    this._lastSliderMax = this.maxRaiseTarget;
+    this.currentRaiseTarget = clampedTarget;
 
     const snappedPercent =
       this.maxRaiseTarget <= this.minRaiseTarget
@@ -1363,7 +1431,7 @@ export default class GameScene extends Phaser.Scene {
         : (this.currentRaiseTarget - this.minRaiseTarget) / (this.maxRaiseTarget - this.minRaiseTarget);
 
     // Vertical position: maxY is bottom (0%), minY is top (100%)
-    const thumbY = maxY - snappedPercent * (maxY - minY);
+    const thumbY = Math.round(maxY - snappedPercent * (maxY - minY));
     this.raiseThumb.x = trackX;
     this.raiseThumb.y = thumbY;
     if (this.raiseThumbGlow) {
@@ -1377,17 +1445,20 @@ export default class GameScene extends Phaser.Scene {
         : this.highestBet === 0
         ? "BET AMOUNT"
         : "RAISE TO";
-    if (this.raiseHeaderLabel) this.raiseHeaderLabel.setText(headerTitle);
-    this.raiseAmountTextUI.setText(this.currentRaiseTarget.toLocaleString());
+    if (this.raiseHeaderLabel) this.setTextSafe(this.raiseHeaderLabel, headerTitle);
+    this.setTextSafe(this.raiseAmountTextUI, this.currentRaiseTarget.toLocaleString());
 
-    this.raiseFill.clear();
-    const fillH = Math.max(10, maxY - thumbY);
-    // Outer Crimson Neon Fill
-    this.raiseFill.fillStyle(0xff0033, 1);
-    this.raiseFill.fillRoundedRect(trackX - trackW / 2, thumbY, trackW, fillH, 8);
-    // Inner Gold Core Strip
-    this.raiseFill.fillStyle(0xffcc00, 0.85);
-    this.raiseFill.fillRoundedRect(trackX - 3, thumbY + 2, 6, Math.max(6, fillH - 4), 3);
+    if (this._lastThumbY !== thumbY) {
+      this._lastThumbY = thumbY;
+      this.raiseFill.clear();
+      const fillH = Math.max(10, maxY - thumbY);
+      // Outer Crimson Neon Fill
+      this.raiseFill.fillStyle(0xff0033, 1);
+      this.raiseFill.fillRoundedRect(trackX - trackW / 2, thumbY, trackW, fillH, 8);
+      // Inner Gold Core Strip
+      this.raiseFill.fillStyle(0xffcc00, 0.85);
+      this.raiseFill.fillRoundedRect(trackX - 3, thumbY + 2, 6, Math.max(6, fillH - 4), 3);
+    }
   }
 
   createBalanceBadge(x, y, width, height, angle, initialCoins) {
@@ -1400,8 +1471,9 @@ export default class GameScene extends Phaser.Scene {
     pill.strokeRoundedRect(-width / 2, -height / 2, width, height, height / 2);
 
     const coinIcon = this.add.circle(-width / 2 + 14, 0, 6, 0xffcc00);
+    const initialStr = Number(initialCoins || 0).toLocaleString();
     const text = this.add
-      .text(6, 0, Number(initialCoins || 0).toLocaleString(), {
+      .text(6, 0, initialStr, {
         fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
         fontSize: "14px",
         color: "#ffd700",
@@ -1409,6 +1481,7 @@ export default class GameScene extends Phaser.Scene {
         strokeThickness: 3
       })
       .setOrigin(0.5);
+    text._cachedText = initialStr;
 
     container.add([pill, coinIcon, text]);
     container.textObj = text;
@@ -1470,8 +1543,7 @@ export default class GameScene extends Phaser.Scene {
           stroke: "#000000",
           strokeThickness: 5
         })
-        .setOrigin(0.5)
-        .setShadow(0, 3, "#000000", 6, true, true);
+        .setOrigin(0.5);
 
       const pv = {
         playerId: selfPlayer.id,
@@ -1553,8 +1625,7 @@ export default class GameScene extends Phaser.Scene {
           }
         )
         .setOrigin(0.5)
-        .setAngle(pos.textAngle)
-        .setShadow(0, 3, "#000000", 5, true, true);
+        .setAngle(pos.textAngle);
 
       const pv = {
         playerId: p.id,
@@ -1605,7 +1676,7 @@ export default class GameScene extends Phaser.Scene {
         p => p.id === pv.playerId || p.username.toLowerCase() === pv.username.toLowerCase()
       );
       if (player && player.coins !== undefined && pv.coinsText) {
-        pv.coinsText.setText(Number(player.coins).toLocaleString());
+        this.setTextSafe(pv.coinsText, Number(player.coins).toLocaleString());
       }
     });
   }
@@ -1637,6 +1708,7 @@ export default class GameScene extends Phaser.Scene {
     this.roundFinished = false;
     this.dealingDone = false;
     this.isRaising = false;
+    this._lastTimerStateKey = "";
 
     this.hideCyberWinnerDialog(true);
     this.hideWaitingOverlay();
@@ -1672,18 +1744,22 @@ export default class GameScene extends Phaser.Scene {
               background: #050505;
               border-left: 2px solid #ff0033;
               border-right: 2px solid #ff0033;
-              box-shadow: 0 0 40px rgba(255, 0, 51, 0.4);
+              box-shadow: 0 0 28px rgba(255, 0, 51, 0.4);
               overflow: hidden;
               display: flex;
               justify-content: center;
               align-items: center;
-              transform: translateY(100vh);
+              will-change: transform, width;
+              backface-visibility: hidden;
+              -webkit-backface-visibility: hidden;
+              transform: translate3d(0, 100vh, 0);
               transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
                           width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
           ">
               <div id="cyberAlertContent" style="
                   min-width: 550px;
                   opacity: 0;
+                  will-change: opacity;
                   transition: opacity 0.2s linear;
                   display: flex;
                   flex-direction: column;
@@ -1710,7 +1786,6 @@ export default class GameScene extends Phaser.Scene {
                       line-height: 1.5;
                       font-weight: bold;
                       text-align: center;
-                      text-shadow: 0 0 5px rgba(255, 204, 0, 0.3);
                   ">Are you sure you want to exit?<br>If the match has started, you will<br>lose your invested amount.</p>
 
                   <div style="display: flex; gap: 20px;">
@@ -1759,7 +1834,7 @@ export default class GameScene extends Phaser.Scene {
 
     setTimeout(() => {
       if (wrapper && content) {
-        wrapper.style.transform = "translateY(0)";
+        wrapper.style.transform = "translate3d(0, 0, 0)";
         setTimeout(() => {
           wrapper.style.width = "100%";
         }, 350);
@@ -1775,7 +1850,7 @@ export default class GameScene extends Phaser.Scene {
         if (wrapper) wrapper.style.width = "2px";
       }, 200);
       setTimeout(() => {
-        if (wrapper) wrapper.style.transform = "translateY(100vh)";
+        if (wrapper) wrapper.style.transform = "translate3d(0, 100vh, 0)";
         this.tweens.add({
           targets: overlay,
           fillAlpha: 0,
@@ -1842,18 +1917,22 @@ export default class GameScene extends Phaser.Scene {
               background: #050505;
               border-left: 2px solid #ffcc00;
               border-right: 2px solid #ffcc00;
-              box-shadow: 0 0 40px rgba(255, 204, 0, 0.4);
+              box-shadow: 0 0 28px rgba(255, 204, 0, 0.4);
               overflow: hidden;
               display: flex;
               justify-content: center;
               align-items: center;
-              transform: translateY(100vh);
+              will-change: transform, width;
+              backface-visibility: hidden;
+              -webkit-backface-visibility: hidden;
+              transform: translate3d(0, 100vh, 0);
               transition: transform 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275), 
                           width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
           ">
               <div id="cyberWinnerContent" style="
                   min-width: 550px;
                   opacity: 0;
+                  will-change: opacity;
                   transition: opacity 0.2s linear;
                   display: flex;
                   flex-direction: column;
@@ -1909,7 +1988,7 @@ export default class GameScene extends Phaser.Scene {
 
     setTimeout(() => {
       if (wrapper && content) {
-        wrapper.style.transform = "translateY(0)";
+        wrapper.style.transform = "translate3d(0, 0, 0)";
         setTimeout(() => {
           wrapper.style.width = "100%";
         }, 350);
@@ -1949,7 +2028,7 @@ export default class GameScene extends Phaser.Scene {
       if (wrapper) wrapper.style.width = "2px";
     }, 200);
     setTimeout(() => {
-      if (wrapper) wrapper.style.transform = "translateY(100vh)";
+      if (wrapper) wrapper.style.transform = "translate3d(0, 100vh, 0)";
 
       if (this.scene && this.scene.isActive()) {
         this.tweens.add({
@@ -1975,7 +2054,7 @@ export default class GameScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    if (this.sessionIdText) this.sessionIdText.setText(payload.sessionId || payload.roomId || "WAITING");
+    if (this.sessionIdText) this.setTextSafe(this.sessionIdText, payload.sessionId || payload.roomId || "WAITING");
 
     if (this.waitOverlay && this.waitOverlay.cachedPhase !== payload.phase) this.hideWaitingOverlay();
 
@@ -2034,17 +2113,17 @@ export default class GameScene extends Phaser.Scene {
     if (payload.phase === "waiting_240") {
       const mins = Math.floor(payload.waitingSeconds / 60);
       const secs = payload.waitingSeconds % 60;
-      this.waitOverlay.title.setText(`ROOM ID: ${payload.roomId}`);
-      this.waitOverlay.body.setText(`Waiting: ${mins}:${secs < 10 ? "0" : ""}${secs}`);
+      this.setTextSafe(this.waitOverlay.title, `ROOM ID: ${payload.roomId}`);
+      this.setTextSafe(this.waitOverlay.body, `Waiting: ${mins}:${secs < 10 ? "0" : ""}${secs}`);
     } else if (payload.phase === "waiting_random") {
-      this.waitOverlay.title.setText("FINDING MATCH");
-      this.waitOverlay.body.setText("Waiting for other players...");
+      this.setTextSafe(this.waitOverlay.title, "FINDING MATCH");
+      this.setTextSafe(this.waitOverlay.body, "Waiting for other players...");
     } else {
-      this.waitOverlay.title.setText("MATCH STARTING");
-      this.waitOverlay.body.setText(`Starting in: ${payload.waitingSeconds}s`);
+      this.setTextSafe(this.waitOverlay.title, "MATCH STARTING");
+      this.setTextSafe(this.waitOverlay.body, `Starting in: ${payload.waitingSeconds}s`);
     }
 
-    this.waitOverlay.sub.setText(`Players Ready: ${payload.activePlayers}/5`);
+    this.setTextSafe(this.waitOverlay.sub, `Players Ready: ${payload.activePlayers}/5`);
     const isHost = this.username.toLowerCase() === (this.hostUsername || "").toLowerCase();
     if (this.isPrivate && isHost && payload.phase === "waiting_240" && payload.activePlayers >= 2) {
       this.waitOverlay.startBtn.setVisible(true);
@@ -2172,6 +2251,15 @@ export default class GameScene extends Phaser.Scene {
     if (AlertManager.showToastx) AlertManager.showToastx(this, txt);
   }
 
+  hideRaiseTower() {
+    if (this.raiseContainer && this.raiseContainer.visible) {
+      this.raiseContainer.setVisible(false);
+    }
+    if (this.raiseThumbGlowTween && !this.raiseThumbGlowTween.isPaused()) {
+      this.raiseThumbGlowTween.pause();
+    }
+  }
+
   updateTurnUI() {
     const buttons = [this.foldBtn, this.checkBtn, this.callBtn, this.raiseBtn, this.allInBtn].filter(Boolean);
 
@@ -2186,11 +2274,11 @@ export default class GameScene extends Phaser.Scene {
 
     if (this.pot !== undefined && this.betInfoText) {
       const betStr = this.highestBet > 0 ? `  |  BET: ${Number(this.highestBet).toLocaleString()}` : "";
-      this.betInfoText.setText(`POT: ${Number(this.pot || 0).toLocaleString()}${betStr}`);
+      this.setTextSafe(this.betInfoText, `POT: ${Number(this.pot || 0).toLocaleString()}${betStr}`);
     }
     if (this.phaseInfoText) {
       const phaseLabel = this.sessionId && this.dealingDone ? (this.currentPhase || "PREFLOP").toUpperCase() : "";
-      this.phaseInfoText.setText(phaseLabel);
+      this.setTextSafe(this.phaseInfoText, phaseLabel);
     }
 
     if (
@@ -2202,10 +2290,10 @@ export default class GameScene extends Phaser.Scene {
       !this.dealingDone
     ) {
       buttons.forEach(btn => {
-        btn.setVisible(false);
+        if (btn.visible) btn.setVisible(false);
         btn.setButtonEnabled(false);
       });
-      if (this.raiseContainer) this.raiseContainer.setVisible(false);
+      this.hideRaiseTower();
       this.clearTimerCircles();
       return;
     }
@@ -2216,34 +2304,40 @@ export default class GameScene extends Phaser.Scene {
     this.players.forEach(p => {
       const pv = this.playerViews.find(v => v.username.toLowerCase() === p.username.toLowerCase());
       if (pv && pv.cardSprites) {
+        const targetAlpha = p.hasFolded ? 0.25 : 1;
         pv.cardSprites.forEach(sprite => {
-          sprite.setAlpha(p.hasFolded ? 0.25 : 1);
+          if (sprite.alpha !== targetAlpha) sprite.setAlpha(targetAlpha);
         });
       }
     });
 
     if (me.hasFolded || me.isAllIn) {
       buttons.forEach(btn => {
-        btn.setVisible(false);
+        if (btn.visible) btn.setVisible(false);
         btn.setButtonEnabled(false);
       });
-      this.raiseContainer.setVisible(false);
+      this.hideRaiseTower();
       this.updateTimerCircles();
       return;
     }
 
     if (this.isRaising && isUserTurn) {
       buttons.forEach(btn => {
-        btn.setVisible(true);
+        if (!btn.visible) btn.setVisible(true);
         btn.setButtonEnabled(false);
       });
       this.raiseContainer.setVisible(true);
+      if (this.raiseThumbGlowTween && this.raiseThumbGlowTween.isPaused()) {
+        this.raiseThumbGlowTween.resume();
+      }
       this.updateTimerCircles();
       return;
     }
 
-    this.raiseContainer.setVisible(false);
-    buttons.forEach(btn => btn.setVisible(true));
+    this.hideRaiseTower();
+    buttons.forEach(btn => {
+      if (!btn.visible) btn.setVisible(true);
+    });
 
     const myInvested = me.investedThisPhase || 0;
     const callAmount = Math.max(0, this.highestBet - myInvested);
@@ -2295,6 +2389,13 @@ export default class GameScene extends Phaser.Scene {
     }
     const total = this.turnTime || 25;
     const remaining = this.remainingTime;
+    const activePlayer = this.players[this.currentTurnIndex];
+    const activeId = activePlayer ? activePlayer.id : "";
+
+    // Skip graphics clear & arc triangulation if timer state hasn't changed
+    const timerKey = `${activeId}_${remaining}_${total}`;
+    if (this._lastTimerStateKey === timerKey) return;
+    this._lastTimerStateKey = timerKey;
 
     this.playerViews.forEach(pv => {
       const g = pv.timerGraphics;
@@ -2304,8 +2405,8 @@ export default class GameScene extends Phaser.Scene {
       if (!player) return;
 
       const isActiveTurn =
-        this.players[this.currentTurnIndex] &&
-        this.players[this.currentTurnIndex].id === pv.playerId &&
+        activePlayer &&
+        activePlayer.id === pv.playerId &&
         !player.hasFolded &&
         !player.isAllIn;
       const progress = isActiveTurn ? remaining / total : 0;
@@ -2320,6 +2421,8 @@ export default class GameScene extends Phaser.Scene {
   }
 
   clearTimerCircles() {
+    if (this._lastTimerStateKey === "CLEARED") return;
+    this._lastTimerStateKey = "CLEARED";
     this.playerViews.forEach(pv => {
       if (pv.timerGraphics) pv.timerGraphics.clear();
     });
@@ -2370,12 +2473,12 @@ export default class GameScene extends Phaser.Scene {
           .setOrigin(0.5)
           .setAngle(pv.label.angle || 0)
           .setDepth(100);
+        pv.statusBadge._cachedText = labelText;
+        pv.statusBadge._cachedColor = badgeColor;
       } else {
-        pv.statusBadge
-          .setText(labelText)
-          .setColor(badgeColor)
-          .setAngle(pv.label.angle || 0)
-          .setPosition(badgeX, badgeY);
+        this.setTextSafe(pv.statusBadge, labelText);
+        this.setColorSafe(pv.statusBadge, badgeColor);
+        pv.statusBadge.setPosition(badgeX, badgeY);
       }
 
       // Dynamic Dealer (D), Small Blind (SB), and Big Blind (BB) Badges
@@ -2412,8 +2515,10 @@ export default class GameScene extends Phaser.Scene {
           })
           .setOrigin(0.5)
           .setDepth(101);
+        pv.roleBadge._cachedText = roleText;
       } else {
-        pv.roleBadge.setText(roleText).setPosition(roleX, roleY);
+        this.setTextSafe(pv.roleBadge, roleText);
+        pv.roleBadge.setPosition(roleX, roleY);
       }
     });
   }
