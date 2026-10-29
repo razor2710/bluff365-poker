@@ -31,6 +31,17 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  // Bakes expensive Phaser Graphics into a single hardware-accelerated GPU texture once
+  bakeGraphicsTexture(key, width, height, drawFn) {
+    if (!this.textures.exists(key)) {
+      const g = this.make.graphics({ x: 0, y: 0, add: false });
+      drawFn(g, width / 2, height / 2);
+      g.generateTexture(key, width, height);
+      g.destroy();
+    }
+    return key;
+  }
+
   init(data) {
     if (!data || !data.username || !session || !session.flowGuard?.startedFromSplash) {
       this.scene.start("SplashScene");
@@ -98,7 +109,9 @@ export default class GameScene extends Phaser.Scene {
     this.maxRaiseTarget = 0;
     this.currentRaiseTarget = 0;
     this._sliderForceRedraw = false;
+    this._lastSliderTextTime = 0;
     this._lastTimerStateKey = "";
+    this._isSlidingSeekbar = false;
   }
 
   create() {
@@ -222,12 +235,14 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setShadow(0, 4, themeStyles.shadowColor, themeStyles.shadowBlur, true, true);
 
-    // --- CYBER EXIT BUTTON ---
+    // --- CYBER EXIT BUTTON (Baked to GPU Texture) ---
     const exitX = w - 110;
     const exitY = 60;
-    const exitBg = this.add.graphics();
-    exitBg.fillStyle(0x050505, 1).fillRoundedRect(exitX - 75, exitY - 25, 150, 50, 25);
-    exitBg.lineStyle(2, 0xff0033, 1).strokeRoundedRect(exitX - 75, exitY - 25, 150, 50, 25);
+    const exitTexKey = this.bakeGraphicsTexture("cyber_exit_btn_tex", 160, 60, (g, cx, cy) => {
+      g.fillStyle(0x050505, 1).fillRoundedRect(cx - 75, cy - 25, 150, 50, 25);
+      g.lineStyle(2, 0xff0033, 1).strokeRoundedRect(cx - 75, cy - 25, 150, 50, 25);
+    });
+    this.add.image(exitX, exitY, exitTexKey);
 
     this.add
       .zone(exitX, exitY, 180, 100)
@@ -652,96 +667,102 @@ export default class GameScene extends Phaser.Scene {
   }
 
   // ==========================================
-  // SUPER-ANIMATIVE LUXURY CYBER ACTION BUTTON
+  // SUPER-ANIMATIVE LUXURY CYBER ACTION BUTTON (GPU Texture Baked)
   // ==========================================
   createActionButton(x, y, width, height, label, fillHex, strokeHex, textColor, onClick) {
     const container = this.add.container(x, y).setDepth(1500);
     container.baseX = x;
     container.baseY = y;
 
-    // 1. Breathing Outer Neon Halo
-    const aura = this.add.graphics();
-    aura.fillStyle(strokeHex, 0.22);
-    aura.fillRoundedRect(-width / 2 - 8, -height / 2 - 8, width + 16, height + 16, 22);
-    aura.setAlpha(0);
+    const texW = width + 24;
+    const texH = height + 24;
 
-    // 2. Multi-Layered Luxury Beveled Body (Cached by state to prevent mobile GPU lag)
-    const bg = this.add.graphics();
-    const drawBg = (isHovered = false, isPressed = false) => {
-      const stateKey = `${isHovered ? 1 : 0}_${isPressed ? 1 : 0}`;
-      if (container._bgStateKey === stateKey) return;
-      container._bgStateKey = stateKey;
+    // 1. Pre-baked Breathing Outer Neon Halo
+    const auraKey = this.bakeGraphicsTexture(`btn_aura_${width}_${height}_${strokeHex}`, texW, texH, (g, cx, cy) => {
+      g.fillStyle(strokeHex, 0.22);
+      g.fillRoundedRect(cx - width / 2 - 8, cy - height / 2 - 8, width + 16, height + 16, 22);
+    });
+    const aura = this.add.image(0, 0, auraKey).setAlpha(0);
 
-      bg.clear();
+    // 2. Pre-baked Multi-Layered Luxury Beveled Body (Normal, Hover, Pressed textures)
+    const makeBtnStateTex = (isHovered, isPressed) => {
+      const key = `btn_bg_${width}_${height}_${fillHex}_${strokeHex}_${isHovered ? 1 : 0}_${isPressed ? 1 : 0}`;
+      return this.bakeGraphicsTexture(key, texW, texH, ( bg, cx, cy ) => {
+        // Drop shadow
+        bg.fillStyle(0x000000, 0.65);
+        bg.fillRoundedRect(cx - width / 2, cy - height / 2 + 5, width, height, 16);
 
-      // Drop shadow
-      bg.fillStyle(0x000000, 0.65);
-      bg.fillRoundedRect(-width / 2, -height / 2 + 5, width, height, 16);
+        // Deep Obsidian Base
+        bg.fillStyle(0x060609, 0.96);
+        bg.fillRoundedRect(cx - width / 2, cy - height / 2, width, height, 16);
 
-      // Deep Obsidian Base
-      bg.fillStyle(0x060609, 0.96);
-      bg.fillRoundedRect(-width / 2, -height / 2, width, height, 16);
+        // Colored Inner Core Tint
+        bg.fillStyle(fillHex, isHovered ? 0.95 : 0.78);
+        bg.fillRoundedRect(cx - width / 2 + 3, cy - height / 2 + 3, width - 6, height - 6, 14);
 
-      // Colored Inner Core Tint
-      bg.fillStyle(fillHex, isHovered ? 0.95 : 0.78);
-      bg.fillRoundedRect(-width / 2 + 3, -height / 2 + 3, width - 6, height - 6, 14);
+        // Top Glass Specular Highlight
+        bg.fillStyle(0xffffff, isHovered ? 0.18 : 0.09);
+        bg.fillRoundedRect(cx - width / 2 + 6, cy - height / 2 + 4, width - 12, height * 0.42, {
+          tl: 11,
+          tr: 11,
+          bl: 3,
+          br: 3
+        });
 
-      // Top Glass Specular Highlight
-      bg.fillStyle(0xffffff, isHovered ? 0.18 : 0.09);
-      bg.fillRoundedRect(-width / 2 + 6, -height / 2 + 4, width - 12, height * 0.42, {
-        tl: 11,
-        tr: 11,
-        bl: 3,
-        br: 3
+        // Bottom Neon Status Accent Pill
+        bg.fillStyle(strokeHex, isHovered ? 1 : 0.8);
+        bg.fillRoundedRect(cx - width * 0.26, cy + height / 2 - 7, width * 0.52, 4, 2);
+
+        // Outer Neon Border
+        bg.lineStyle(isHovered ? 3.5 : 2.5, isPressed ? 0xffffff : strokeHex, 1);
+        bg.strokeRoundedRect(cx - width / 2, cy - height / 2, width, height, 16);
+
+        // Inner Gold/Cyber Rim
+        bg.lineStyle(1, 0xffffff, isHovered ? 0.45 : 0.16);
+        bg.strokeRoundedRect(cx - width / 2 + 4, cy - height / 2 + 4, width - 8, height - 8, 12);
+
+        // Cyber Corner Brackets
+        const cLen = 12;
+        const r = width / 2 - 3;
+        const b = height / 2 - 3;
+        bg.lineStyle(2, 0xffffff, isHovered ? 0.85 : 0.35);
+        // Top-left bracket
+        bg.beginPath();
+        bg.moveTo(cx - r, cy - b + cLen);
+        bg.lineTo(cx - r, cy - b);
+        bg.lineTo(cx - r + cLen, cy - b);
+        bg.strokePath();
+        // Bottom-right bracket
+        bg.beginPath();
+        bg.moveTo(cx + r, cy + b - cLen);
+        bg.lineTo(cx + r, cy + b);
+        bg.lineTo(cx + r - cLen, cy + b);
+        bg.strokePath();
       });
-
-      // Bottom Neon Status Accent Pill
-      bg.fillStyle(strokeHex, isHovered ? 1 : 0.8);
-      bg.fillRoundedRect(-width * 0.26, height / 2 - 7, width * 0.52, 4, 2);
-
-      // Outer Neon Border
-      bg.lineStyle(isHovered ? 3.5 : 2.5, isPressed ? 0xffffff : strokeHex, 1);
-      bg.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
-
-      // Inner Gold/Cyber Rim
-      bg.lineStyle(1, 0xffffff, isHovered ? 0.45 : 0.16);
-      bg.strokeRoundedRect(-width / 2 + 4, -height / 2 + 4, width - 8, height - 8, 12);
-
-      // Cyber Corner Brackets
-      const cLen = 12;
-      const r = width / 2 - 3;
-      const b = height / 2 - 3;
-      bg.lineStyle(2, 0xffffff, isHovered ? 0.85 : 0.35);
-      // Top-left bracket
-      bg.beginPath();
-      bg.moveTo(-r, -b + cLen);
-      bg.lineTo(-r, -b);
-      bg.lineTo(-r + cLen, -b);
-      bg.strokePath();
-      // Bottom-right bracket
-      bg.beginPath();
-      bg.moveTo(r, b - cLen);
-      bg.lineTo(r, b);
-      bg.lineTo(r - cLen, b);
-      bg.strokePath();
     };
-    drawBg(false, false);
 
-    // 3. Shimmer Light Sweep Bar
-    const shimmer = this.add.graphics();
-    shimmer.fillStyle(0xffffff, 0.28);
-    shimmer.fillRect(-14, -height / 2 + 4, 28, height - 8);
-    shimmer.setAngle(18);
-    shimmer.x = -width / 2 - 30;
-    shimmer.setAlpha(0);
+    const texNormal = makeBtnStateTex(false, false);
+    const texHover = makeBtnStateTex(true, false);
+    const texPressed = makeBtnStateTex(true, true);
 
-    // 4. Crisp Label Text (Zero blur shadow for instant Canvas2D rasterization on Android)
+    const bg = this.add.image(0, 0, texNormal);
+    const drawBg = (isHovered = false, isPressed = false) => {
+      const targetTex = isPressed ? texPressed : isHovered ? texHover : texNormal;
+      if (bg.texture.key !== targetTex) bg.setTexture(targetTex);
+    };
+
+    // 3. Shimmer Light Sweep Bar (Simple Rectangle Sprite)
+    const shimmer = this.add
+      .rectangle(-width / 2 - 30, 0, 28, height - 8, 0xffffff, 0.28)
+      .setAngle(18)
+      .setAlpha(0);
+
+    // 4. Crisp Label Text (letterSpacing: 0 avoids slow per-character Canvas loop on mobile)
     const textObj = this.add
       .text(0, -2, label, {
         fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
         fontSize: "24px",
         color: textColor,
-        letterSpacing: 1.8,
         stroke: "#000000",
         strokeThickness: 5,
         align: "center"
@@ -749,11 +770,12 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     textObj._cachedText = label;
 
-    // 5. Reusable Shockwave Ripple (Pre-created once instead of allocated on click)
-    const ripple = this.add.graphics();
-    ripple.lineStyle(3, strokeHex, 1);
-    ripple.strokeRoundedRect(-width / 2, -height / 2, width, height, 16);
-    ripple.setAlpha(0);
+    // 5. Pre-baked Shockwave Ripple Sprite
+    const rippleKey = this.bakeGraphicsTexture(`btn_ripple_${width}_${height}_${strokeHex}`, texW, texH, (g, cx, cy) => {
+      g.lineStyle(3, strokeHex, 1);
+      g.strokeRoundedRect(cx - width / 2, cy - height / 2, width, height, 16);
+    });
+    const ripple = this.add.image(0, 0, rippleKey).setAlpha(0);
 
     const hitZone = this.add.zone(0, 0, width, height).setOrigin(0.5);
 
@@ -774,13 +796,12 @@ export default class GameScene extends Phaser.Scene {
     hitZone.on("pointerdown", () => {
       if (!container.isEnabled) return;
 
-      // 1. FIRE THE CLICK ACTION INSTANTLY! (This fixes the mobile touch bug)
+      // 1. FIRE THE CLICK ACTION INSTANTLY!
       if (onClick) onClick();
 
       drawBg(true, true);
       triggerShimmerSweep();
 
-      // Reuse pre-built Shockwave Ripple Effect
       this.tweens.killTweensOf(ripple);
       ripple.setScale(1).setAlpha(1);
       this.tweens.add({
@@ -811,7 +832,6 @@ export default class GameScene extends Phaser.Scene {
 
     hitZone.on("pointerover", pointer => {
       if (!container.isEnabled) return;
-      // Skip hover animations on mobile touch so tap doesn't double-draw
       if (pointer && pointer.wasTouch) return;
       drawBg(true, false);
       triggerShimmerSweep();
@@ -860,12 +880,12 @@ export default class GameScene extends Phaser.Scene {
     container.add([ripple, aura, bg, shimmer, textObj, hitZone]);
     container.textObj = textObj;
     container.hitZone = hitZone;
-    container.isEnabled = null; // null forces initial state setup once
+    container.isEnabled = null;
     container.pulseTween = null;
 
     container.setButtonEnabled = enabled => {
       const nextState = Boolean(enabled);
-      if (container.isEnabled === nextState) return; // CRITICAL ANDROID FPS FIX: skip if unchanged!
+      if (container.isEnabled === nextState) return;
       container.isEnabled = nextState;
 
       if (nextState) {
@@ -994,7 +1014,7 @@ export default class GameScene extends Phaser.Scene {
         } else {
           this.isRaising = true;
           this._sliderForceRedraw = true;
-          this.setSliderTargetBet(this.minRaiseTarget);
+          this.setSliderTargetBet(this.minRaiseTarget, true);
           this.updateTurnUI();
           this.animateRaiseTowerIn();
         }
@@ -1020,7 +1040,7 @@ export default class GameScene extends Phaser.Scene {
     );
 
     // =========================================================================
-    // VERTICAL LUXURY BET SCROLL TOWER (Positioned Below EXIT Button Space)
+    // VERTICAL LUXURY BET SCROLL TOWER (100% GPU Texture-Baked for 60FPS Android)
     // =========================================================================
     const towerX = w - 115;
     const towerY = h * 0.53;
@@ -1040,36 +1060,55 @@ export default class GameScene extends Phaser.Scene {
     this.sliderMinY = minY;
     this.sliderMaxY = maxY;
 
-    // 1. Outer Glow & Obsidian Glass Tower Frame
-    const panelBg = this.add.graphics();
-    // Outer Crimson/Gold Halo
-    panelBg.fillStyle(0xff0033, 0.14);
-    panelBg.fillRoundedRect(-towerW / 2 - 8, -towerH / 2 - 8, towerW + 16, towerH + 16, 26);
-    // Main Obsidian Body
-    panelBg.fillStyle(0x050508, 0.96);
-    panelBg.fillRoundedRect(-towerW / 2, -towerH / 2, towerW, towerH, 22);
-    // Inner Luxury Gold Frame
-    panelBg.lineStyle(2.5, 0xffcc00, 0.95);
-    panelBg.strokeRoundedRect(-towerW / 2, -towerH / 2, towerW, towerH, 22);
-    // Subtle Inner Crimson Trim
-    panelBg.lineStyle(1, 0xff0033, 0.45);
-    panelBg.strokeRoundedRect(-towerW / 2 + 5, -towerH / 2 + 5, towerW - 10, towerH - 10, 18);
+    // 1. Bake Entire Tower Frame + Track Well + Tick Marks into ONE GPU Sprite
+    const towerTexKey = this.bakeGraphicsTexture("raise_tower_master_bg", towerW + 24, towerH + 24, (g, cx, cy) => {
+      // Outer Crimson/Gold Halo
+      g.fillStyle(0xff0033, 0.14);
+      g.fillRoundedRect(cx - towerW / 2 - 8, cy - towerH / 2 - 8, towerW + 16, towerH + 16, 26);
+      // Main Obsidian Body
+      g.fillStyle(0x050508, 0.96);
+      g.fillRoundedRect(cx - towerW / 2, cy - towerH / 2, towerW, towerH, 22);
+      // Inner Luxury Gold Frame
+      g.lineStyle(2.5, 0xffcc00, 0.95);
+      g.strokeRoundedRect(cx - towerW / 2, cy - towerH / 2, towerW, towerH, 22);
+      // Subtle Inner Crimson Trim
+      g.lineStyle(1, 0xff0033, 0.45);
+      g.strokeRoundedRect(cx - towerW / 2 + 5, cy - towerH / 2 + 5, towerW - 10, towerH - 10, 18);
 
-    // Top Amount Readout Box
-    panelBg.fillStyle(0x14080c, 0.95);
-    panelBg.fillRoundedRect(-towerW / 2 + 12, -towerH / 2 + 14, towerW - 24, 74, 14);
-    panelBg.lineStyle(1.5, 0xffcc00, 0.85);
-    panelBg.strokeRoundedRect(-towerW / 2 + 12, -towerH / 2 + 14, towerW - 24, 74, 14);
-    this.raiseContainer.add(panelBg);
+      // Top Amount Readout Box
+      g.fillStyle(0x14080c, 0.95);
+      g.fillRoundedRect(cx - towerW / 2 + 12, cy - towerH / 2 + 14, towerW - 24, 74, 14);
+      g.lineStyle(1.5, 0xffcc00, 0.85);
+      g.strokeRoundedRect(cx - towerW / 2 + 12, cy - towerH / 2 + 14, towerW - 24, 74, 14);
 
-    // Header Title & Live Amount Text
+      // Tick marks along the vertical track
+      for (let t = 0; t <= 10; t++) {
+        const ty = cy + minY + (t / 10) * (maxY - minY);
+        const isMajor = t === 0 || t === 5 || t === 10;
+        g.lineStyle(isMajor ? 2 : 1, isMajor ? 0xffcc00 : 0x555555, isMajor ? 0.8 : 0.45);
+        g.beginPath();
+        g.moveTo(cx + trackX - trackW / 2 - (isMajor ? 10 : 6), ty);
+        g.lineTo(cx + trackX - trackW / 2 - 2, ty);
+        g.strokePath();
+      }
+
+      // Track Well
+      g.fillStyle(0x14141c, 1);
+      g.fillRoundedRect(cx + trackX - trackW / 2, cy + minY, trackW, maxY - minY, 9);
+      g.lineStyle(2, 0x444455, 1);
+      g.strokeRoundedRect(cx + trackX - trackW / 2, cy + minY, trackW, maxY - minY, 9);
+    });
+
+    const towerBgSprite = this.add.image(0, 0, towerTexKey);
+    this.raiseContainer.add(towerBgSprite);
+
+    // Header Title & Live Amount Text (letterSpacing: 0 for instant single-pass Canvas render)
     this.raiseHeaderLabel = this.add
       .text(0, -towerH / 2 + 32, "RAISE TO", {
         fontFamily: "Courier New",
         fontSize: "14px",
         color: "#ffcc00",
-        fontWeight: "bold",
-        letterSpacing: 2
+        fontWeight: "bold"
       })
       .setOrigin(0.5);
     this.raiseHeaderLabel._cachedText = "RAISE TO";
@@ -1079,7 +1118,6 @@ export default class GameScene extends Phaser.Scene {
         fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
         fontSize: "28px",
         color: "#ffffff",
-        letterSpacing: 1.5,
         stroke: "#ff0033",
         strokeThickness: 4
       })
@@ -1087,54 +1125,32 @@ export default class GameScene extends Phaser.Scene {
     this.raiseAmountTextUI._cachedText = "0";
     this.raiseContainer.add([this.raiseHeaderLabel, this.raiseAmountTextUI]);
 
-    // 2. Vertical Slider Track & Tick Marks
-    const trackBg = this.add.graphics();
-    // Tick marks along the vertical track
-    for (let t = 0; t <= 10; t++) {
-      const ty = minY + (t / 10) * (maxY - minY);
-      const isMajor = t === 0 || t === 5 || t === 10;
-      trackBg.lineStyle(isMajor ? 2 : 1, isMajor ? 0xffcc00 : 0x555555, isMajor ? 0.8 : 0.45);
-      trackBg.beginPath();
-      trackBg.moveTo(trackX - trackW / 2 - (isMajor ? 10 : 6), ty);
-      trackBg.lineTo(trackX - trackW / 2 - 2, ty);
-      trackBg.strokePath();
-    }
-    // Track Well
-    trackBg.fillStyle(0x14141c, 1);
-    trackBg.fillRoundedRect(trackX - trackW / 2, minY, trackW, maxY - minY, 9);
-    trackBg.lineStyle(2, 0x444455, 1);
-    trackBg.strokeRoundedRect(trackX - trackW / 2, minY, trackW, maxY - minY, 9);
-    this.raiseContainer.add(trackBg);
+    // 2. Zero-Triangulation Hardware Fill Bars (Bottom-anchored Rectangles instead of Graphics.clear)
+    this.raiseFillOuter = this.add
+      .rectangle(trackX, maxY, trackW - 2, 10, 0xff0033, 1)
+      .setOrigin(0.5, 1);
+    this.raiseFillInner = this.add
+      .rectangle(trackX, maxY - 2, 6, 6, 0xffcc00, 0.85)
+      .setOrigin(0.5, 1);
+    this.raiseContainer.add([this.raiseFillOuter, this.raiseFillInner]);
 
-    // Dynamic Vertical Fill Bar (Fills from Bottom up to Thumb)
-    this.raiseFill = this.add.graphics();
-    this.raiseContainer.add(this.raiseFill);
-
-    // Interactive Track Hit Zone (Click anywhere on track to jump to that bet)
-    const trackHitZone = this.add
-      .zone(trackX, (minY + maxY) / 2, 48, maxY - minY + 30)
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    trackHitZone.on("pointerdown", pointer => {
-      if (this.sndClick) this.sndClick.play();
-      const localY = pointer.y - this.raiseContainer.y;
-      const clampedY = Phaser.Math.Clamp(localY, minY, maxY);
-      const percent = (maxY - clampedY) / (maxY - minY);
-      const rawTarget = this.minRaiseTarget + percent * (this.maxRaiseTarget - this.minRaiseTarget);
-      this.setSliderTargetBet(rawTarget);
+    // Draggable Luxury Gold & Crimson Thumb (Baked to GPU Sprites)
+    const thumbGlowKey = this.bakeGraphicsTexture("raise_thumb_glow_tex", 56, 56, (g, cx, cy) => {
+      g.fillStyle(0xff0033, 0.35);
+      g.fillCircle(cx, cy, 26);
     });
-    this.raiseContainer.add(trackHitZone);
+    const thumbKey = this.bakeGraphicsTexture("raise_thumb_knob_tex", 44, 44, (g, cx, cy) => {
+      g.fillStyle(0xffcc00, 1);
+      g.fillCircle(cx, cy, 18);
+      g.lineStyle(3.5, 0xffffff, 1);
+      g.strokeCircle(cx, cy, 18);
+    });
 
-    // Draggable Luxury Gold & Crimson Thumb
-    this.raiseThumbGlow = this.add.circle(trackX, maxY, 26, 0xff0033, 0.35);
-    this.raiseThumb = this.add
-      .circle(trackX, maxY, 18, 0xffcc00)
-      .setInteractive({ useHandCursor: true, draggable: true });
-    this.raiseThumb.setStrokeStyle(3.5, 0xffffff);
-    this.input.setDraggable(this.raiseThumb);
+    this.raiseThumbGlow = this.add.image(trackX, maxY, thumbGlowKey);
+    this.raiseThumb = this.add.image(trackX, maxY, thumbKey);
     this.raiseContainer.add([this.raiseThumbGlow, this.raiseThumb]);
 
-    // Paused by default while raiseContainer is hidden to save CPU/GPU
+    // Paused by default while raiseContainer is hidden
     this.raiseThumbGlowTween = this.tweens.add({
       targets: this.raiseThumbGlow,
       scaleX: { from: 0.9, to: 1.25 },
@@ -1146,12 +1162,58 @@ export default class GameScene extends Phaser.Scene {
       paused: true
     });
 
-    // + and - Fine-Tune Step Buttons at Top & Bottom of Track
+    // Unified High-Response Touch Seekbar Zone (Covers track + thumb for 1-motion touch & slide)
+    const updateFromPointerY = (pointerY, forceTextFlush = false) => {
+      const localY = pointerY - this.raiseContainer.y;
+      const clampedY = Phaser.Math.Clamp(localY, minY, maxY);
+      const percent = (maxY - clampedY) / (maxY - minY);
+      const rawTarget = this.minRaiseTarget + percent * (this.maxRaiseTarget - this.minRaiseTarget);
+      this.setSliderTargetBet(rawTarget, forceTextFlush);
+    };
+
+    const trackHitZone = this.add
+      .zone(trackX, (minY + maxY) / 2, 72, maxY - minY + 44)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true, draggable: true });
+    this.input.setDraggable(trackHitZone);
+
+    trackHitZone.on("pointerdown", pointer => {
+      if (this.sndClick) this.sndClick.play();
+      this._isSlidingSeekbar = true;
+      updateFromPointerY(pointer.y, true);
+    });
+
+    trackHitZone.on("drag", pointer => {
+      if (!this._isSlidingSeekbar) return;
+      updateFromPointerY(pointer.y, false);
+    });
+
+    trackHitZone.on("pointermove", pointer => {
+      if (!this._isSlidingSeekbar || !pointer.isDown) return;
+      updateFromPointerY(pointer.y, false);
+    });
+
+    const endSeekbarSlide = pointer => {
+      if (!this._isSlidingSeekbar) return;
+      this._isSlidingSeekbar = false;
+      if (pointer) updateFromPointerY(pointer.y, true);
+      else this.setSliderTargetBet(this.currentRaiseTarget, true);
+    };
+
+    trackHitZone.on("dragend", pointer => endSeekbarSlide(pointer));
+    trackHitZone.on("pointerup", pointer => endSeekbarSlide(pointer));
+    trackHitZone.on("pointerupoutside", pointer => endSeekbarSlide(pointer));
+    this.raiseContainer.add(trackHitZone);
+
+    // + and - Fine-Tune Step Buttons at Top & Bottom of Track (Baked Circle Texture)
+    const stepCircleKey = this.bakeGraphicsTexture("raise_step_btn_tex", 42, 42, (g, cx, cy) => {
+      g.fillStyle(0x161622, 1).fillCircle(cx, cy, 18);
+      g.lineStyle(2, 0xffcc00, 0.9).strokeCircle(cx, cy, 18);
+    });
+
     const makeStepBtn = (bx, by, symbol, deltaSign) => {
       const sContainer = this.add.container(bx, by);
-      const sBg = this.add.graphics();
-      sBg.fillStyle(0x161622, 1).fillCircle(0, 0, 18);
-      sBg.lineStyle(2, 0xffcc00, 0.9).strokeCircle(0, 0, 18);
+      const sBg = this.add.image(0, 0, stepCircleKey);
       const sTxt = this.add
         .text(0, -1, symbol, {
           fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
@@ -1160,7 +1222,7 @@ export default class GameScene extends Phaser.Scene {
         })
         .setOrigin(0.5);
       const sZone = this.add
-        .zone(0, 0, 38, 38)
+        .zone(0, 0, 42, 42)
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
 
@@ -1174,7 +1236,7 @@ export default class GameScene extends Phaser.Scene {
         sContainer.setScale(0.9);
         this.time.delayedCall(80, () => sContainer.setScale(1));
         const step = 10;
-        this.setSliderTargetBet(this.currentRaiseTarget + deltaSign * step);
+        this.setSliderTargetBet(this.currentRaiseTarget + deltaSign * step, true);
       });
       sContainer.add([sBg, sTxt, sZone]);
       return sContainer;
@@ -1184,7 +1246,7 @@ export default class GameScene extends Phaser.Scene {
     const minusBtn = makeStepBtn(trackX, maxY + 34, "−", -1);
     this.raiseContainer.add([plusBtn, minusBtn]);
 
-    // 3. Vertical Quick-Preset Pills on the Left Column of the Tower
+    // 3. Vertical Quick-Preset Pills on the Left Column of the Tower (Baked to GPU Sprites)
     const presets = [
       { label: "MAX", y: -135, color: 0xff0033, getTarget: () => this.maxRaiseTarget },
       {
@@ -1206,24 +1268,24 @@ export default class GameScene extends Phaser.Scene {
       const pContainer = this.add.container(-36, pr.y);
       const pW = 92;
       const pH = 42;
-      const pBg = this.add.graphics();
-      const drawPreset = hovered => {
-        if (pContainer._hovered === hovered) return;
-        pContainer._hovered = hovered;
-        pBg.clear();
-        pBg.fillStyle(hovered ? pr.color : 0x12121a, hovered ? 0.28 : 0.95);
-        pBg.fillRoundedRect(-pW / 2, -pH / 2, pW, pH, 10);
-        pBg.lineStyle(hovered ? 2.5 : 1.5, pr.color, 0.95);
-        pBg.strokeRoundedRect(-pW / 2, -pH / 2, pW, pH, 10);
-      };
-      drawPreset(false);
+
+      const makePresetTex = hovered =>
+        this.bakeGraphicsTexture(`preset_pill_${pr.color}_${hovered ? 1 : 0}`, pW + 8, pH + 8, (g, cx, cy) => {
+          g.fillStyle(hovered ? pr.color : 0x12121a, hovered ? 0.28 : 0.95);
+          g.fillRoundedRect(cx - pW / 2, cy - pH / 2, pW, pH, 10);
+          g.lineStyle(hovered ? 2.5 : 1.5, pr.color, 0.95);
+          g.strokeRoundedRect(cx - pW / 2, cy - pH / 2, pW, pH, 10);
+        });
+
+      const pTexNorm = makePresetTex(false);
+      const pTexHov = makePresetTex(true);
+      const pBg = this.add.image(0, 0, pTexNorm);
 
       const pTxt = this.add
         .text(0, 0, pr.label, {
           fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
           fontSize: "16px",
           color: "#ffffff",
-          letterSpacing: 1,
           stroke: "#000000",
           strokeThickness: 3
         })
@@ -1236,12 +1298,12 @@ export default class GameScene extends Phaser.Scene {
 
       pZone.on("pointerover", pointer => {
         if (pointer && pointer.wasTouch) return;
-        drawPreset(true);
+        pBg.setTexture(pTexHov);
         this.tweens.add({ targets: pContainer, scaleX: 1.07, scaleY: 1.07, duration: 120 });
       });
       pZone.on("pointerout", pointer => {
         if (pointer && pointer.wasTouch) return;
-        drawPreset(false);
+        pBg.setTexture(pTexNorm);
         this.tweens.add({ targets: pContainer, scaleX: 1, scaleY: 1, duration: 120 });
       });
       pZone.on("pointerdown", () => {
@@ -1253,37 +1315,42 @@ export default class GameScene extends Phaser.Scene {
           duration: 70,
           yoyo: true
         });
-        this.setSliderTargetBet(pr.getTarget());
+        this.setSliderTargetBet(pr.getTarget(), true);
       });
 
       pContainer.add([pBg, pTxt, pZone]);
       this.raiseContainer.add(pContainer);
     });
 
-    // 4. Confirm & Cancel Buttons at the Bottom of the Vertical Tower
+    // 4. Confirm & Cancel Buttons at the Bottom of the Vertical Tower (Baked to GPU Sprites)
     const makeTowerActionBtn = (by, bHeight, labelText, fillHex, borderHex, textColor, onTrigger) => {
       const bCont = this.add.container(0, by);
       const bWidth = towerW - 26;
-      const bGfx = this.add.graphics();
-      const drawBtn = hovered => {
-        if (bCont._hovered === hovered) return;
-        bCont._hovered = hovered;
-        bGfx.clear();
-        bGfx.fillStyle(fillHex, hovered ? 1 : 0.9);
-        bGfx.fillRoundedRect(-bWidth / 2, -bHeight / 2, bWidth, bHeight, 12);
-        bGfx.fillStyle(0xffffff, hovered ? 0.16 : 0.07);
-        bGfx.fillRoundedRect(-bWidth / 2 + 4, -bHeight / 2 + 3, bWidth - 8, bHeight * 0.42, 8);
-        bGfx.lineStyle(hovered ? 3 : 2, borderHex, 1);
-        bGfx.strokeRoundedRect(-bWidth / 2, -bHeight / 2, bWidth, bHeight, 12);
-      };
-      drawBtn(false);
+
+      const makeTowerBtnTex = hovered =>
+        this.bakeGraphicsTexture(
+          `tower_act_${bWidth}_${bHeight}_${fillHex}_${borderHex}_${hovered ? 1 : 0}`,
+          bWidth + 8,
+          bHeight + 8,
+          (g, cx, cy) => {
+            g.fillStyle(fillHex, hovered ? 1 : 0.9);
+            g.fillRoundedRect(cx - bWidth / 2, cy - bHeight / 2, bWidth, bHeight, 12);
+            g.fillStyle(0xffffff, hovered ? 0.16 : 0.07);
+            g.fillRoundedRect(cx - bWidth / 2 + 4, cy - bHeight / 2 + 3, bWidth - 8, bHeight * 0.42, 8);
+            g.lineStyle(hovered ? 3 : 2, borderHex, 1);
+            g.strokeRoundedRect(cx - bWidth / 2, cy - bHeight / 2, bWidth, bHeight, 12);
+          }
+        );
+
+      const bTexNorm = makeTowerBtnTex(false);
+      const bTexHov = makeTowerBtnTex(true);
+      const bGfx = this.add.image(0, 0, bTexNorm);
 
       const bTxt = this.add
         .text(0, 0, labelText, {
           fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
           fontSize: "21px",
           color: textColor,
-          letterSpacing: 1.5,
           stroke: "#000000",
           strokeThickness: 4
         })
@@ -1296,16 +1363,16 @@ export default class GameScene extends Phaser.Scene {
 
       bZone.on("pointerover", pointer => {
         if (pointer && pointer.wasTouch) return;
-        drawBtn(true);
+        bGfx.setTexture(bTexHov);
         this.tweens.add({ targets: bCont, scaleX: 1.05, scaleY: 1.05, duration: 130 });
       });
       bZone.on("pointerout", pointer => {
         if (pointer && pointer.wasTouch) return;
-        drawBtn(false);
+        bGfx.setTexture(bTexNorm);
         this.tweens.add({ targets: bCont, scaleX: 1, scaleY: 1, duration: 130 });
       });
       bZone.on("pointerdown", () => {
-        if (onTrigger) onTrigger(); // <--- FIRE INSTANTLY FOR MOBILE
+        if (onTrigger) onTrigger();
 
         this.tweens.add({
           targets: bCont,
@@ -1360,20 +1427,12 @@ export default class GameScene extends Phaser.Scene {
 
     this.raiseContainer.add([confirmTowerBtn, cancelTowerBtn]);
 
-    // Vertical Drag Handler (Up = Higher Bet, Down = Lower Bet)
-    this.raiseThumb.on("drag", (pointer, dragX, dragY) => {
-      const clampedY = Phaser.Math.Clamp(dragY, minY, maxY);
-      const percent = (maxY - clampedY) / (maxY - minY);
-      const rawTarget = this.minRaiseTarget + percent * (this.maxRaiseTarget - this.minRaiseTarget);
-      this.setSliderTargetBet(rawTarget);
-    });
-
     // Mouse Wheel Support while Vertical Bet Tower is Open
     this.input.on("wheel", (pointer, gameObjects, dx, dy) => {
       if (!this.isRaising || !this.raiseContainer.visible) return;
       const step = 10;
       const direction = dy < 0 ? 1 : -1;
-      this.setSliderTargetBet(this.currentRaiseTarget + direction * step);
+      this.setSliderTargetBet(this.currentRaiseTarget + direction * step, true);
     });
   }
 
@@ -1399,20 +1458,19 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
-  setSliderTargetBet(targetBetAmount) {
+  setSliderTargetBet(targetBetAmount, forceTextFlush = false) {
     const minY = this.sliderMinY;
     const maxY = this.sliderMaxY;
     const trackX = this.sliderTrackX;
-    const trackW = this.sliderTrackW;
     const snapUnit = 10;
 
     let snapped = Math.round(targetBetAmount / snapUnit) * snapUnit;
     if (targetBetAmount >= this.maxRaiseTarget) snapped = this.maxRaiseTarget;
     const clampedTarget = Phaser.Math.Clamp(snapped, this.minRaiseTarget, this.maxRaiseTarget);
 
-    // Skip expensive text/graphics redraws during touch drag if snapped value hasn't changed
     if (
       !this._sliderForceRedraw &&
+      !forceTextFlush &&
       this.currentRaiseTarget === clampedTarget &&
       this._lastSliderMin === this.minRaiseTarget &&
       this._lastSliderMax === this.maxRaiseTarget
@@ -1430,8 +1488,8 @@ export default class GameScene extends Phaser.Scene {
         ? 1
         : (this.currentRaiseTarget - this.minRaiseTarget) / (this.maxRaiseTarget - this.minRaiseTarget);
 
-    // Vertical position: maxY is bottom (0%), minY is top (100%)
-    const thumbY = Math.round(maxY - snappedPercent * (maxY - minY));
+    // 1. Instant 120Hz Thumb & Fill Bar Transform (Pure math, zero Graphics.clear() or triangulation)
+    const thumbY = maxY - snappedPercent * (maxY - minY);
     this.raiseThumb.x = trackX;
     this.raiseThumb.y = thumbY;
     if (this.raiseThumbGlow) {
@@ -1439,38 +1497,42 @@ export default class GameScene extends Phaser.Scene {
       this.raiseThumbGlow.y = thumbY;
     }
 
-    const headerTitle =
-      this.currentRaiseTarget >= this.maxRaiseTarget
-        ? "ALL-IN"
-        : this.highestBet === 0
-        ? "BET AMOUNT"
-        : "RAISE TO";
-    if (this.raiseHeaderLabel) this.setTextSafe(this.raiseHeaderLabel, headerTitle);
-    this.setTextSafe(this.raiseAmountTextUI, this.currentRaiseTarget.toLocaleString());
+    const fillH = Math.max(8, maxY - thumbY);
+    if (this.raiseFillOuter) {
+      this.raiseFillOuter.displayHeight = fillH;
+    }
+    if (this.raiseFillInner) {
+      this.raiseFillInner.displayHeight = Math.max(4, fillH - 4);
+    }
 
-    if (this._lastThumbY !== thumbY) {
-      this._lastThumbY = thumbY;
-      this.raiseFill.clear();
-      const fillH = Math.max(10, maxY - thumbY);
-      // Outer Crimson Neon Fill
-      this.raiseFill.fillStyle(0xff0033, 1);
-      this.raiseFill.fillRoundedRect(trackX - trackW / 2, thumbY, trackW, fillH, 8);
-      // Inner Gold Core Strip
-      this.raiseFill.fillStyle(0xffcc00, 0.85);
-      this.raiseFill.fillRoundedRect(trackX - 3, thumbY + 2, 6, Math.max(6, fillH - 4), 3);
+    // 2. Throttled Text Texture Upload (Prevents synchronous gl.texImage2D stalls during fast drag)
+    const now = performance.now();
+    if (forceTextFlush || now - this._lastSliderTextTime >= 32) {
+      this._lastSliderTextTime = now;
+      const headerTitle =
+        this.currentRaiseTarget >= this.maxRaiseTarget
+          ? "ALL-IN"
+          : this.highestBet === 0
+          ? "BET AMOUNT"
+          : "RAISE TO";
+      if (this.raiseHeaderLabel) this.setTextSafe(this.raiseHeaderLabel, headerTitle);
+      this.setTextSafe(this.raiseAmountTextUI, this.currentRaiseTarget.toLocaleString());
     }
   }
 
   createBalanceBadge(x, y, width, height, angle, initialCoins) {
     const container = this.add.container(x, y).setAngle(angle || 0).setDepth(95);
 
-    const pill = this.add.graphics();
-    pill.fillStyle(0x050505, 0.9);
-    pill.fillRoundedRect(-width / 2, -height / 2, width, height, height / 2);
-    pill.lineStyle(2, 0xffcc00, 0.9);
-    pill.strokeRoundedRect(-width / 2, -height / 2, width, height, height / 2);
+    const pillTexKey = this.bakeGraphicsTexture(`balance_pill_${width}_${height}`, width + 6, height + 6, (g, cx, cy) => {
+      g.fillStyle(0x050505, 0.9);
+      g.fillRoundedRect(cx - width / 2, cy - height / 2, width, height, height / 2);
+      g.lineStyle(2, 0xffcc00, 0.9);
+      g.strokeRoundedRect(cx - width / 2, cy - height / 2, width, height, height / 2);
+      g.fillStyle(0xffcc00, 1);
+      g.fillCircle(cx - width / 2 + 14, cy, 6);
+    });
 
-    const coinIcon = this.add.circle(-width / 2 + 14, 0, 6, 0xffcc00);
+    const pillSprite = this.add.image(0, 0, pillTexKey);
     const initialStr = Number(initialCoins || 0).toLocaleString();
     const text = this.add
       .text(6, 0, initialStr, {
@@ -1483,7 +1545,7 @@ export default class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     text._cachedText = initialStr;
 
-    container.add([pill, coinIcon, text]);
+    container.add([pillSprite, text]);
     container.textObj = text;
     return container;
   }
@@ -1708,6 +1770,7 @@ export default class GameScene extends Phaser.Scene {
     this.roundFinished = false;
     this.dealingDone = false;
     this.isRaising = false;
+    this._isSlidingSeekbar = false;
     this._lastTimerStateKey = "";
 
     this.hideCyberWinnerDialog(true);
@@ -2252,6 +2315,7 @@ export default class GameScene extends Phaser.Scene {
   }
 
   hideRaiseTower() {
+    this._isSlidingSeekbar = false;
     if (this.raiseContainer && this.raiseContainer.visible) {
       this.raiseContainer.setVisible(false);
     }
@@ -2392,7 +2456,6 @@ export default class GameScene extends Phaser.Scene {
     const activePlayer = this.players[this.currentTurnIndex];
     const activeId = activePlayer ? activePlayer.id : "";
 
-    // Skip graphics clear & arc triangulation if timer state hasn't changed
     const timerKey = `${activeId}_${remaining}_${total}`;
     if (this._lastTimerStateKey === timerKey) return;
     this._lastTimerStateKey = timerKey;
@@ -2450,7 +2513,6 @@ export default class GameScene extends Phaser.Scene {
         badgeColor = "#00ff88";
       }
 
-      // Restored inside the player's avatar (away from the cards, timer circle, and balance pill)
       const inwardRad = Phaser.Math.DegToRad(pv.seat.inward ?? -100);
       const distance = pv.avatar.displayHeight / 2 - 10;
       const badgeX = pv.seat.x + distance * Math.cos(inwardRad + Math.PI);
