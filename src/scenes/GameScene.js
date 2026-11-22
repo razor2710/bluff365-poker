@@ -1579,7 +1579,7 @@ export default class GameScene extends Phaser.Scene {
         .setDisplaySize(avatarSize, avatarSize);
 
       const rawSelfCoins =
-        selfPlayer.coins !== undefined && selfPlayer.coins > 0
+        selfPlayer.coins !== undefined
           ? selfPlayer.coins
           : this.maxPot > 0
           ? Math.min(Number(this.userData.coins || 0), this.maxPot)
@@ -1657,7 +1657,7 @@ export default class GameScene extends Phaser.Scene {
       // 1. Balance Pill placed below avatar, outside loading circle
       const coinsDist = 64;
       const oppCoins =
-        p.coins !== undefined && p.coins > 0
+        p.coins !== undefined
           ? p.coins
           : this.maxPot > 0
           ? this.maxPot
