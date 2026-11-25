@@ -197,21 +197,34 @@ export default class LobbyScene extends Phaser.Scene {
       this.showSettingsDialog();
     });
 
-   if (session.socket) {
+if (session.socket) {
       session.socket.off("match_history_response");
       session.socket.on("match_history_response", payload => {
         if (payload && payload.success) {
           this.updateCoins(payload.coins);
-          this.userHistory = payload.history || [];
+          const nextHistory = payload.history || [];
+          const hasChanged = JSON.stringify(this.userHistory || []) !== JSON.stringify(nextHistory);
+          this.userHistory = nextHistory;
 
-          if (this.settingsDialog) {
-            const currentScrollY = this.settingsDialog.container ? (this.settingsDialog.container.y - this.settingsDialog.baseY) : 0;
-            const skipAnim = true;
-            this.closeSettingsDialog(skipAnim);
-            this.showSettingsDialog(currentScrollY);
+          // Only refresh open dialog if new match entries actually arrived, and skip re-animating
+          if (this.settingsDialog && hasChanged) {
+            const currentScrollY = this.settingsDialog.content
+              ? (this.settingsDialog.content.y - this.settingsDialog.baseY)
+              : 0;
+            this.closeSettingsDialog(true);
+            this.showSettingsDialog(currentScrollY, true);
           }
         }
       });
+
+      // ✨ FIX 2: Listen for instant balance changes directly from the server
+      session.socket.off("balance_synced");
+      session.socket.on("balance_synced", payload => {
+        if (payload && payload.coins !== undefined) {
+          this.updateCoins(payload.coins);
+        }
+      });
+
       session.socket.emit("get_match_history", { username: this.userData.username });
     }
 
@@ -487,7 +500,10 @@ export default class LobbyScene extends Phaser.Scene {
   // ==========================================
   // MATCH HISTORY DIALOG
   // ==========================================
-  showSettingsDialog(restoreScrollY = 0) {
+// ==========================================
+  // MATCH HISTORY DIALOG
+  // ==========================================
+  showSettingsDialog(restoreScrollY = 0, skipEntrance = false) {
     if (this.settingsDialog) return;
     this.playBtn?.disableInteractive();
     this.joinBtn?.disableInteractive();
@@ -496,8 +512,8 @@ export default class LobbyScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setDepth(4000).setInteractive();
-    
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, skipEntrance ? 0.85 : 0).setDepth(4000).setInteractive();
+
     const mainContainer = this.add.container(w / 2, h / 2).setDepth(4001);
     const contents = [];
 
@@ -506,36 +522,43 @@ export default class LobbyScene extends Phaser.Scene {
 
     const shadow = this.add.graphics();
     shadow.fillStyle(0xffcc00, 0.15);
-    shadow.fillRoundedRect(-panelW/2 - 10, -panelH/2 - 10, panelW+20, panelH+20, 24);
+    shadow.fillRoundedRect(-panelW / 2 - 10, -panelH / 2 - 10, panelW + 20, panelH + 20, 24);
     mainContainer.add(shadow);
 
     const panel = this.add.graphics();
     panel.fillStyle(0x050505, 1);
-    panel.fillRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 24);
+    panel.fillRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 24);
     panel.lineStyle(4, 0xffcc00, 1);
-    panel.strokeRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 24);
+    panel.strokeRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 24);
     mainContainer.add(panel);
 
-   const title = this.add.text(0, -panelH/2 + 65, "MATCH HISTORY", {
-        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "46px", color: "#ffcc00", letterSpacing: 3
+    const title = this.add.text(0, -panelH / 2 + 65, "MATCH HISTORY", {
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "46px", color: "#ffcc00", letterSpacing: 3
     }).setOrigin(0.5);
     contents.push(title);
 
- const closeBtn = this.add.text(panelW/2 - 50, -panelH/2 + 50, "X", {
-        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033"
+    const closeBtn = this.add.text(panelW / 2 - 50, -panelH / 2 + 50, "X", {
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033"
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    
-    closeBtn.on('pointerover', () => closeBtn.setScale(1.2));
-    closeBtn.on('pointerout', () => closeBtn.setScale(1));
+
+    closeBtn.on("pointerover", () => closeBtn.setScale(1.2));
+    closeBtn.on("pointerout", () => closeBtn.setScale(1));
     contents.push(closeBtn);
 
-    const listX = -panelW/2 + 25;
-    const listY = -panelH/2 + 130;
+    const listX = -panelW / 2 + 25;
+    const listY = -panelH / 2 + 130;
     const listW = panelW - 50;
-    const listH = panelH - 180;
+    const listH = panelH - 170;
 
     const content = this.add.container(listX, listY);
     contents.push(content);
+
+    // Clip mask strictly inside the dialog's list viewport
+    const maskShape = this.make.graphics({ x: 0, y: 0, add: false });
+    maskShape.fillStyle(0xffffff);
+    maskShape.fillRect(w / 2 + listX, h / 2 + listY, listW, listH);
+    const listMask = maskShape.createGeometryMask();
+    content.setMask(listMask);
 
     let currentY = 0;
     const rowH = 120;
@@ -543,7 +566,7 @@ export default class LobbyScene extends Phaser.Scene {
 
     if (!this.userHistory || this.userHistory.length === 0) {
       const noData = this.add.text(listW / 2, 130, "NO RECENT MATCHES.", {
-          fontFamily: "Courier New", fontSize: "33px", color: "#ffffff", fontWeight: 'bold'
+        fontFamily: "Courier New", fontSize: "33px", color: "#ffffff", fontWeight: "bold"
       }).setOrigin(0.5);
       content.add(noData);
     } else {
@@ -554,37 +577,40 @@ export default class LobbyScene extends Phaser.Scene {
         const strokeColor = isWin ? 0x00ff88 : 0xff0033;
         const textColor = isWin ? "#00ff88" : "#ff0033";
 
+        // Group each row in its own container positioned at y so culling & clipping work cleanly
+        const rowContainer = this.add.container(0, y);
+
         const row = this.add.graphics();
-        row.fillStyle(rowColor, 1).fillRoundedRect(0, y, listW, rowH, 12);
-        row.lineStyle(2, strokeColor, 1).strokeRoundedRect(0, y, listW, rowH, 12);
+        row.fillStyle(rowColor, 1).fillRoundedRect(0, 0, listW, rowH, 12);
+        row.lineStyle(2, strokeColor, 1).strokeRoundedRect(0, 0, listW, rowH, 12);
 
         const sid = match.sessionId || "Unknown";
         const table = match.tableName || "Unknown";
         const city = match.cityName || "Unknown";
-        
         const dateStr = match.startedAt ? new Date(match.startedAt).toLocaleString() : "Unknown Date";
 
-        const t1 = this.add.text(26, y + 25, `ID: ${sid} | ${table} (${city})`, {
-            fontFamily: "Courier New", fontSize: "22px", color: "#ffffff", fontWeight: 'bold'
+        const t1 = this.add.text(26, 25, `ID: ${sid} | ${table} (${city})`, {
+          fontFamily: "Courier New", fontSize: "22px", color: "#ffffff", fontWeight: "bold"
         });
 
-        const t2 = this.add.text(listW - 26, y + 25, dateStr, {
-            fontFamily: "Courier New", fontSize: "22px", color: "#bbbbbb"
+        const t2 = this.add.text(listW - 26, 25, dateStr, {
+          fontFamily: "Courier New", fontSize: "22px", color: "#bbbbbb"
         }).setOrigin(1, 0);
 
-        const t3 = this.add.text(26, y + 75, isWin ? "VICTORY" : "DEFEAT", {
-            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor, letterSpacing: 2
+        const t3 = this.add.text(26, 75, isWin ? "VICTORY" : "DEFEAT", {
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor, letterSpacing: 2
         });
 
-        const t4 = this.add.text(listW / 2, y + 75, `Pot: ${match.pot || 0} | Inv: ${match.invested || 0}`, {
-            fontFamily: "Courier New", fontSize: "24px", color: "#ffcc00", fontWeight: 'bold'
+        const t4 = this.add.text(listW / 2, 75, `Pot: ${match.pot || 0} | Inv: ${match.invested || 0}`, {
+          fontFamily: "Courier New", fontSize: "24px", color: "#ffcc00", fontWeight: "bold"
         }).setOrigin(0.5, 0);
 
-       const t5 = this.add.text(listW - 26, y + 75, `${isWin ? "+" : "-"}${Math.abs(match.netChange || 0)}`, {
-            fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor
+        const t5 = this.add.text(listW - 26, 75, `${isWin ? "+" : "-"}${Math.abs(match.netChange || 0)}`, {
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor
         }).setOrigin(1, 0);
 
-        content.add([row, t1, t2, t3, t4, t5]);
+        rowContainer.add([row, t1, t2, t3, t4, t5]);
+        content.add(rowContainer);
         currentY += rowH + rowGap;
       });
     }
@@ -595,8 +621,9 @@ export default class LobbyScene extends Phaser.Scene {
 
     const updateVisibility = () => {
       content.iterate(child => {
-        const localY = content.y + child.y;
-        child.visible = localY > listY - 50 && localY < listY + listH + 50;
+        const rowTop = content.y + child.y;
+        const rowBottom = rowTop + rowH;
+        child.visible = rowBottom > listY && rowTop < listY + listH;
       });
     };
 
@@ -606,7 +633,7 @@ export default class LobbyScene extends Phaser.Scene {
     content.y = listY + Phaser.Math.Clamp(restoreScrollY, minScroll, maxScroll);
     updateVisibility();
 
-    const scrollArea = this.add.rectangle(0, 30, listW, listH, 0xffffff, 0).setInteractive();
+    const scrollArea = this.add.rectangle(0, listY + listH / 2, listW, listH, 0xffffff, 0).setInteractive();
     mainContainer.add(scrollArea);
 
     let dragging = false;
@@ -631,7 +658,7 @@ export default class LobbyScene extends Phaser.Scene {
     this.input.on("pointermove", onMove);
     this.input.on("pointerup", onUp);
 
-    this.settingsDialog = { container: mainContainer, contents, dim, baseY: listY };
+    this.settingsDialog = { container: mainContainer, content, contents, dim, baseY: listY };
 
     this.closeSettingsDialog = (skipAnim = false) => {
       if (this.sndClickClose && !skipAnim) this.sndClickClose.play();
@@ -644,29 +671,33 @@ export default class LobbyScene extends Phaser.Scene {
       this.settingsBtn?.setInteractive({ useHandCursor: true });
 
       const doCleanup = () => {
-          if (mainContainer) mainContainer.destroy();
-          if (dim) dim.destroy();
-          this.settingsDialog = null;
-          this.closeSettingsDialog = null;
-      }
+        if (content) content.clearMask(true);
+        if (maskShape) maskShape.destroy();
+        if (mainContainer) mainContainer.destroy();
+        if (dim) dim.destroy();
+        this.settingsDialog = null;
+        this.closeSettingsDialog = null;
+      };
 
       if (skipAnim) {
-          doCleanup();
+        doCleanup();
       } else {
-          this.triggerExitAnimation(this.settingsDialog, doCleanup);
+        this.triggerExitAnimation(this.settingsDialog, doCleanup);
       }
     };
 
     closeBtn.on("pointerdown", () => this.closeSettingsDialog());
-    
-    dim.on("pointerdown", (pointer) => pointer.event.stopPropagation());
-    dim.on("pointerup", (pointer) => pointer.event.stopPropagation());
+
+    dim.on("pointerdown", pointer => pointer.event.stopPropagation());
+    dim.on("pointerup", pointer => pointer.event.stopPropagation());
 
     this.events.once("shutdown", () => {
       if (this.closeSettingsDialog) this.closeSettingsDialog(true);
     });
 
-    this.animateEntrance(mainContainer, contents, dim);
+    if (!skipEntrance) {
+      this.animateEntrance(mainContainer, contents, dim);
+    }
   }
 
   // ==========================================
