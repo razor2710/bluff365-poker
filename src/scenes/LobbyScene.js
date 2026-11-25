@@ -42,15 +42,13 @@ export default class LobbyScene extends Phaser.Scene {
     this.sndSee = this.sound.add("see");
     this.sndYourTurn = this.sound.add("your_turn");
 
-
-       const username = this.userData.username || this.userData.uname || (session.user && session.user.username) || "";
+    const username = this.userData.username || this.userData.uname || (session.user && session.user.username) || "";
     const coins = this.userData.coins ?? this.userData.bluff_coins ?? (session.user && session.user.bluff_coins) ?? 0;
     const deviceId = this.userData.deviceId || this.userData.device_id || (session.user && session.user.device_id) || "";
     const deviceName = this.userData.deviceName || this.userData.device_name || (session.user && session.user.device_name) || "";
 
     this.userData = { ...this.userData, username, coins: Number(coins || 0), deviceId, deviceName };
 
-    // ✨ FIX 1: Restore the connection listener that triggers the overlay
     if (session.cleanupLobbyListeners) {
       session.cleanupLobbyListeners();
     }
@@ -101,7 +99,7 @@ export default class LobbyScene extends Phaser.Scene {
     const paddingX = 31;
     const avatarAreaW = 72;
     const elementGap = 20;
-    
+
     const profilePanelW = paddingX + avatarAreaW + elementGap + nameWidth + paddingX;
     const profilePanelH = 104;
     const profilePanelX = w - profilePanelW - 75;
@@ -110,11 +108,7 @@ export default class LobbyScene extends Phaser.Scene {
     const profilePanel = this.add.graphics();
     profilePanel.fillStyle(0x000000, 0.22);
     profilePanel.fillRoundedRect(profilePanelX, profilePanelY, profilePanelW, profilePanelH, 24);
-    
-    // 👇 CHANGED: Lime Green Outline
-    profilePanel.lineStyle(3, 0x32cd32, 1); 
-    // 👆
-    
+    profilePanel.lineStyle(3, 0x32cd32, 1);
     profilePanel.strokeRoundedRect(profilePanelX, profilePanelY, profilePanelW, profilePanelH, 24);
 
     const profileCenterY = profilePanelY + profilePanelH / 2;
@@ -123,47 +117,47 @@ export default class LobbyScene extends Phaser.Scene {
     this.add.circle(profileCenterX, profileCenterY, 36, 0xffd700).setDepth(1);
     const userAvatarKey = `avatar_${username.toLowerCase()}`;
     const profileImgKey = this.textures.exists(userAvatarKey) ? userAvatarKey : "avatar";
-    
+
     this.add.image(profileCenterX, profileCenterY, profileImgKey)
-        .setDisplaySize(57, 57)
-        .setDepth(1);
+      .setDisplaySize(57, 57)
+      .setDepth(1);
 
     this.add.text(profileCenterX + 54, profileCenterY, username, {
       fontFamily: "Arial Black", fontSize: "36px", color: "#ffffff", stroke: "#000000", strokeThickness: 2
     }).setOrigin(0, 0.5).setDepth(1);
-    
+
     profileNameText.setPosition(profileCenterX + 54, profileCenterY).setVisible(true);
 
     // ==========================================
     // CENTER TITLE & GLITCH ANIMATION
     // ==========================================
-   this.gameTitle = this.add.text(w / 2, h * 0.26, "POKER HOLD'EM", {
+    this.gameTitle = this.add.text(w / 2, h * 0.26, "POKER HOLD'EM", {
       fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "120px", color: "#ff0033", stroke: "#330000", strokeThickness: 8, letterSpacing: 8
     }).setOrigin(0.5).setShadow(0, 0, "rgba(255,0,51,0.6)", 25, true, true);
 
-    this.add.text(w / 2, h * 0.35, "PLAY • WIN • DOMINATE", { 
-        fontFamily: "Courier New", fontSize: "31px", color: "#ffcc00", fontWeight: 'bold', letterSpacing: 8
+    this.add.text(w / 2, h * 0.35, "PLAY • WIN • DOMINATE", {
+      fontFamily: "Courier New", fontSize: "31px", color: "#ffcc00", fontWeight: "bold", letterSpacing: 8
     }).setOrigin(0.5);
 
     this.time.addEvent({
-        delay: 5000,
-        loop: true,
-        callback: () => {
-            if (!this.gameTitle) return;
-            this.tweens.add({
-                targets: this.gameTitle,
-                x: this.gameTitle.x + Phaser.Math.Between(-15, 15),
-                alpha: 0.6,
-                duration: 40,
-                yoyo: true,
-                repeat: 3,
-                onComplete: () => {
-                    this.gameTitle.x = w / 2; 
-                }
-            });
-            this.gameTitle.setColor("#ffffff");
-            this.time.delayedCall(120, () => this.gameTitle.setColor("#ff0033"));
-        }
+      delay: 5000,
+      loop: true,
+      callback: () => {
+        if (!this.gameTitle) return;
+        this.tweens.add({
+          targets: this.gameTitle,
+          x: this.gameTitle.x + Phaser.Math.Between(-15, 15),
+          alpha: 0.6,
+          duration: 40,
+          yoyo: true,
+          repeat: 3,
+          onComplete: () => {
+            this.gameTitle.x = w / 2;
+          }
+        });
+        this.gameTitle.setColor("#ffffff");
+        this.time.delayedCall(120, () => this.gameTitle.setColor("#ff0033"));
+      }
     });
 
     // ==========================================
@@ -197,7 +191,7 @@ export default class LobbyScene extends Phaser.Scene {
       this.showSettingsDialog();
     });
 
-if (session.socket) {
+    if (session.socket) {
       session.socket.off("match_history_response");
       session.socket.on("match_history_response", payload => {
         if (payload && payload.success) {
@@ -207,7 +201,7 @@ if (session.socket) {
           this.userHistory = nextHistory;
 
           // Only refresh open dialog if new match entries actually arrived, and skip re-animating
-          if (this.settingsDialog && hasChanged) {
+          if (this.settingsDialog && !this.settingsDialog.isClosing && hasChanged) {
             const currentScrollY = this.settingsDialog.content
               ? (this.settingsDialog.content.y - this.settingsDialog.baseY)
               : 0;
@@ -217,7 +211,6 @@ if (session.socket) {
         }
       });
 
-      // ✨ FIX 2: Listen for instant balance changes directly from the server
       session.socket.off("balance_synced");
       session.socket.on("balance_synced", payload => {
         if (payload && payload.coins !== undefined) {
@@ -227,35 +220,6 @@ if (session.socket) {
 
       session.socket.emit("get_match_history", { username: this.userData.username });
     }
-
-
-    if (session.socket) {
-      session.socket.off("match_history_response");
-      session.socket.on("match_history_response", payload => {
-        if (payload && payload.success) {
-          this.updateCoins(payload.coins);
-          this.userHistory = payload.history || [];
-
-          if (this.settingsDialog) {
-            const currentScrollY = this.settingsDialog.container ? (this.settingsDialog.container.y - this.settingsDialog.baseY) : 0;
-            const skipAnim = true;
-            this.closeSettingsDialog(skipAnim);
-            this.showSettingsDialog(currentScrollY);
-          }
-        }
-      });
-
-      // ✨ FIX 2: Listen for instant balance changes directly from the server
-      session.socket.off("balance_synced");
-      session.socket.on("balance_synced", payload => {
-        if (payload && payload.coins !== undefined) {
-          this.updateCoins(payload.coins);
-        }
-      });
-
-      session.socket.emit("get_match_history", { username: this.userData.username });
-    }
-
 
     this.historyRefreshTimer = this.time.addEvent({
       delay: 2000,
@@ -272,52 +236,57 @@ if (session.socket) {
       ProgressManager.hide();
       if (AlertManager.hide) AlertManager.hide();
       this.scene.start("GameScene", {
-        sessionId: match.sessionId, username: this.userData.username, deviceId: this.userData.deviceId,
-        deviceName: this.userData.deviceName, coins: this.userData.coins,tableName: match.tableName || match.table_name || "", table: match
+        sessionId: match.sessionId,
+        username: this.userData.username,
+        deviceId: this.userData.deviceId,
+        deviceName: this.userData.deviceName,
+        coins: this.userData.coins,
+        tableName: match.tableName || match.table_name || "",
+        table: match
       });
     };
 
     this.events.once("shutdown", () => {
       if (this.historyRefreshTimer) this.historyRefreshTimer.remove();
       if (session.socket) {
-          session.socket.off("match_history_response");
-          session.socket.off("balance_synced"); // ✨ Make sure to add this cleanup line!
+        session.socket.off("match_history_response");
+        session.socket.off("balance_synced");
       }
       session.onMatchFound = null;
     });
 
     if (this.userData.activeMatch) {
-        this.time.delayedCall(500, () => {
-            this.showRejoinDialog(this.userData.activeMatch);
-            this.userData.activeMatch = null; 
-        });
+      this.time.delayedCall(500, () => {
+        this.showRejoinDialog(this.userData.activeMatch);
+        this.userData.activeMatch = null;
+      });
     }
   }
 
   // ==========================================
-  // CYBER ANIMATION HELPERS 
+  // CYBER ANIMATION HELPERS
   // ==========================================
   animateEntrance(container, contents, dim) {
     const h = this.scale.height;
     container.y = h + 600;
     container.scaleX = 0.02;
-    contents.forEach(c => { if(c) c.setAlpha(0) });
-    if(dim) dim.setAlpha(0);
+    contents.forEach(c => { if (c) c.setAlpha(0); });
+    if (dim) dim.setAlpha(0);
 
-    if(dim) this.tweens.add({ targets: dim, alpha: 0.85, duration: 300, ease: 'Linear' });
+    if (dim) this.tweens.add({ targets: dim, alpha: 0.85, duration: 300, ease: "Linear" });
     this.tweens.add({
       targets: container,
       y: h / 2,
       duration: 350,
-      ease: 'Cubic.easeOut',
+      ease: "Cubic.easeOut",
       onComplete: () => {
         this.tweens.add({
           targets: container,
           scaleX: 1,
           duration: 350,
-          ease: 'Cubic.easeOut',
+          ease: "Cubic.easeOut",
           onComplete: () => {
-            this.tweens.add({ targets: contents, alpha: 1, duration: 200, ease: 'Linear' });
+            this.tweens.add({ targets: contents, alpha: 1, duration: 200, ease: "Linear" });
           }
         });
       }
@@ -329,26 +298,26 @@ if (session.socket) {
       if (callback) callback();
       return;
     }
-    
+
     if (skipAnim) {
-        callback();
-        return;
+      callback();
+      return;
     }
 
     this.tweens.add({
       targets: uiObj.contents,
       alpha: 0,
       duration: 150,
-      ease: 'Linear',
+      ease: "Linear",
       onComplete: () => {
         this.tweens.add({
           targets: uiObj.container,
           scaleX: 0,
           duration: 200,
-          ease: 'Cubic.easeIn',
+          ease: "Cubic.easeIn",
           onComplete: () => {
             uiObj.container.each(child => child.setVisible(false));
-            
+
             const cardBack = this.add.image(0, 0, "card_back").setDisplaySize(180, 260);
             uiObj.container.add(cardBack);
 
@@ -356,26 +325,26 @@ if (session.socket) {
               targets: uiObj.container,
               scaleX: 1,
               duration: 200,
-              ease: 'Cubic.easeOut',
+              ease: "Cubic.easeOut",
               onComplete: () => {
                 this.tweens.add({
                   targets: uiObj.container,
                   y: this.scale.height + 600,
                   angle: 15,
                   duration: 350,
-                  ease: 'Cubic.easeIn'
+                  ease: "Cubic.easeIn"
                 });
-                
+
                 if (uiObj.dim) {
-                    this.tweens.add({
+                  this.tweens.add({
                     targets: uiObj.dim,
                     alpha: 0,
                     duration: 350,
-                    ease: 'Linear',
+                    ease: "Linear",
                     onComplete: callback
-                    });
+                  });
                 } else {
-                    this.time.delayedCall(350, callback);
+                  this.time.delayedCall(350, callback);
                 }
               }
             });
@@ -389,105 +358,113 @@ if (session.socket) {
   // REJOIN DIALOG
   // ==========================================
   showRejoinDialog(matchData) {
-      const w = this.scale.width;
-      const h = this.scale.height;
+    const w = this.scale.width;
+    const h = this.scale.height;
 
-      const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setDepth(6000).setInteractive();
-      const mainContainer = this.add.container(w / 2, h / 2).setDepth(6001);
-      const contents = [];
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setDepth(6000).setInteractive();
+    const mainContainer = this.add.container(w / 2, h / 2).setDepth(6001);
+    const contents = [];
 
-      const panelW = 750;
-      const panelH = 450;
-      
-      const shadow = this.add.graphics();
-      shadow.fillStyle(0xff0033, 0.15);
-      shadow.fillRoundedRect(-panelW/2 - 10, -panelH/2 - 10, panelW + 20, panelH + 20, 20);
-      mainContainer.add(shadow);
+    const panelW = 750;
+    const panelH = 450;
 
-      const panel = this.add.graphics();
-      panel.fillStyle(0x050505, 1);
-      panel.fillRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 20);
-      panel.lineStyle(4, 0xff0033, 1);
-      panel.strokeRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 20);
-      mainContainer.add(panel);
+    const shadow = this.add.graphics();
+    shadow.fillStyle(0xff0033, 0.15);
+    shadow.fillRoundedRect(-panelW / 2 - 10, -panelH / 2 - 10, panelW + 20, panelH + 20, 20);
+    mainContainer.add(shadow);
 
-     const titleText = this.add.text(0, -140, "MATCH IN PROGRESS", {
-          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033", letterSpacing: 2
-      }).setOrigin(0.5);
+    const panel = this.add.graphics();
+    panel.fillStyle(0x050505, 1);
+    panel.fillRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 20);
+    panel.lineStyle(4, 0xff0033, 1);
+    panel.strokeRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 20);
+    mainContainer.add(panel);
 
-      const infoText = this.add.text(0, -20, 
-          `You have an active match running!\n\nTable: ${matchData.tableName}\nCity: ${matchData.cityName}\nPot: ${matchData.pot} | Boot: ${matchData.bootAmount}`, 
-          { fontFamily: "Courier New", fontSize: "24px", color: "#ffffff", align: "center", fontWeight: "bold" }
-      ).setOrigin(0.5);
+    const titleText = this.add.text(0, -140, "MATCH IN PROGRESS", {
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033", letterSpacing: 2
+    }).setOrigin(0.5);
 
-      const rejoinBg = this.add.graphics();
-      rejoinBg.fillStyle(0xffcc00, 1).fillRoundedRect(-280, 100, 240, 70, 12);
-      const rejoinBtn = this.add.text(-160, 135, "REJOIN", {
-          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "31px", color: "#050505"
-      }).setOrigin(0.5);
-      const rejoinZone = this.add.zone(-280, 100, 240, 70).setOrigin(0).setInteractive({ useHandCursor: true });
+    const infoText = this.add.text(
+      0,
+      -20,
+      `You have an active match running!\n\nTable: ${matchData.tableName}\nCity: ${matchData.cityName}\nPot: ${matchData.pot} | Boot: ${matchData.bootAmount}`,
+      { fontFamily: "Courier New", fontSize: "24px", color: "#ffffff", align: "center", fontWeight: "bold" }
+    ).setOrigin(0.5);
 
-      const dismissBg = this.add.graphics();
-      dismissBg.fillStyle(0x050505, 1).fillRoundedRect(40, 100, 240, 70, 12);
-      dismissBg.lineStyle(2, 0xff0033, 1).strokeRoundedRect(40, 100, 240, 70, 12);
+    const rejoinBg = this.add.graphics();
+    rejoinBg.fillStyle(0xffcc00, 1).fillRoundedRect(-280, 100, 240, 70, 12);
+    const rejoinBtn = this.add.text(-160, 135, "REJOIN", {
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "31px", color: "#050505"
+    }).setOrigin(0.5);
+    const rejoinZone = this.add.zone(-280, 100, 240, 70).setOrigin(0).setInteractive({ useHandCursor: true });
+
+    const dismissBg = this.add.graphics();
+    dismissBg.fillStyle(0x050505, 1).fillRoundedRect(40, 100, 240, 70, 12);
+    dismissBg.lineStyle(2, 0xff0033, 1).strokeRoundedRect(40, 100, 240, 70, 12);
     const dismissBtn = this.add.text(160, 135, "DISMISS", {
-          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "31px", color: "#ff0033"
-      }).setOrigin(0.5);
-      const dismissZone = this.add.zone(40, 100, 240, 70).setOrigin(0).setInteractive({ useHandCursor: true });
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "31px", color: "#ff0033"
+    }).setOrigin(0.5);
+    const dismissZone = this.add.zone(40, 100, 240, 70).setOrigin(0).setInteractive({ useHandCursor: true });
 
-      contents.push(titleText, infoText, rejoinBg, rejoinBtn, rejoinZone, dismissBg, dismissBtn, dismissZone);
-      mainContainer.add(contents);
+    contents.push(titleText, infoText, rejoinBg, rejoinBtn, rejoinZone, dismissBg, dismissBtn, dismissZone);
+    mainContainer.add(contents);
 
-      const uiObj = { container: mainContainer, contents, dim };
+    const uiObj = { container: mainContainer, contents, dim };
 
-      const cleanup = () => {
-          dim.destroy(); mainContainer.destroy();
-      };
+    const cleanup = () => {
+      dim.destroy();
+      mainContainer.destroy();
+    };
 
-      dismissZone.on("pointerdown", () => {
-        if (this.sndClickClose) this.sndClickClose.play();
-        this.triggerExitAnimation(uiObj, cleanup);
-      });
+    dismissZone.on("pointerdown", () => {
+      if (this.sndClickClose) this.sndClickClose.play();
+      this.triggerExitAnimation(uiObj, cleanup);
+    });
 
-      rejoinZone.on("pointerdown", () => {
-          if (this.sndClick) this.sndClick.play();
-          
-          this.triggerExitAnimation(uiObj, () => {
-              cleanup();
-              ProgressManager.show(this);
-              
-              let isHandled = false;
+    rejoinZone.on("pointerdown", () => {
+      if (this.sndClick) this.sndClick.play();
 
-              session.socket.once("rejoin_error", res => {
-                  if (isHandled) return;
-                  isHandled = true;
-                  ProgressManager.hide();
-                  AlertManager.show(this, res.message || "Failed to rejoin.", "REJOIN FAILED");
-              });
+      this.triggerExitAnimation(uiObj, () => {
+        cleanup();
+        ProgressManager.show(this);
 
-              session.socket.once("match_found", match => {
-                  if (isHandled) return;
-                  isHandled = true;
-                  ProgressManager.hide();
-                  this.scene.start("GameScene", {
-                      sessionId: match.sessionId, username: this.userData.username, deviceId: this.userData.deviceId,
-                      deviceName: this.userData.deviceName, coins: this.userData.coins,tableName: match.tableName || match.table_name || matchData.tableName || "", table: match
-                  });
-              });
+        let isHandled = false;
 
-              session.socket.emit("rejoin_match", { sessionId: matchData.sessionId, username: this.userData.username });
+        session.socket.once("rejoin_error", res => {
+          if (isHandled) return;
+          isHandled = true;
+          ProgressManager.hide();
+          AlertManager.show(this, res.message || "Failed to rejoin.", "REJOIN FAILED");
+        });
 
-              this.time.delayedCall(3500, () => {
-                  if (!isHandled) {
-                      isHandled = true;
-                      ProgressManager.hide();
-                      AlertManager.show(this, "Connection timed out. Please try again.", "TIMEOUT");
-                  }
-              });
+        session.socket.once("match_found", match => {
+          if (isHandled) return;
+          isHandled = true;
+          ProgressManager.hide();
+          this.scene.start("GameScene", {
+            sessionId: match.sessionId,
+            username: this.userData.username,
+            deviceId: this.userData.deviceId,
+            deviceName: this.userData.deviceName,
+            coins: this.userData.coins,
+            tableName: match.tableName || match.table_name || matchData.tableName || "",
+            table: match
           });
-      });
+        });
 
-      this.animateEntrance(mainContainer, contents, dim);
+        session.socket.emit("rejoin_match", { sessionId: matchData.sessionId, username: this.userData.username });
+
+        this.time.delayedCall(3500, () => {
+          if (!isHandled) {
+            isHandled = true;
+            ProgressManager.hide();
+            AlertManager.show(this, "Connection timed out. Please try again.", "TIMEOUT");
+          }
+        });
+      });
+    });
+
+    this.animateEntrance(mainContainer, contents, dim);
   }
 
   updateCoins(value) {
@@ -498,9 +475,6 @@ if (session.socket) {
   }
 
   // ==========================================
-  // MATCH HISTORY DIALOG
-  // ==========================================
-// ==========================================
   // MATCH HISTORY DIALOG
   // ==========================================
   showSettingsDialog(restoreScrollY = 0, skipEntrance = false) {
@@ -532,7 +506,7 @@ if (session.socket) {
     panel.strokeRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 24);
     mainContainer.add(panel);
 
-    const title = this.add.text(0, -panelH / 2 + 65, "MATCH HISTORYX", {
+    const title = this.add.text(0, -panelH / 2 + 65, "MATCH HISTORY", {
       fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "46px", color: "#ffcc00", letterSpacing: 3
     }).setOrigin(0.5);
     contents.push(title);
@@ -658,13 +632,22 @@ if (session.socket) {
     this.input.on("pointermove", onMove);
     this.input.on("pointerup", onUp);
 
-    this.settingsDialog = { container: mainContainer, content, contents, dim, baseY: listY };
+    const onShutdown = () => {
+      if (this.closeSettingsDialog) this.closeSettingsDialog(true);
+    };
+    this.events.once("shutdown", onShutdown);
+
+    this.settingsDialog = { container: mainContainer, content, contents, dim, baseY: listY, isClosing: false };
 
     this.closeSettingsDialog = (skipAnim = false) => {
+      if (!this.settingsDialog || (this.settingsDialog.isClosing && !skipAnim)) return;
+      this.settingsDialog.isClosing = true;
+
       if (this.sndClickClose && !skipAnim) this.sndClickClose.play();
 
       this.input.off("pointermove", onMove);
       this.input.off("pointerup", onUp);
+      this.events.off("shutdown", onShutdown);
 
       this.playBtn?.setInteractive({ useHandCursor: true });
       this.joinBtn?.setInteractive({ useHandCursor: true });
@@ -691,10 +674,6 @@ if (session.socket) {
     dim.on("pointerdown", pointer => pointer.event.stopPropagation());
     dim.on("pointerup", pointer => pointer.event.stopPropagation());
 
-    this.events.once("shutdown", () => {
-      if (this.closeSettingsDialog) this.closeSettingsDialog(true);
-    });
-
     if (!skipEntrance) {
       this.animateEntrance(mainContainer, contents, dim);
     }
@@ -719,32 +698,32 @@ if (session.socket) {
 
     const shadow = this.add.graphics();
     shadow.fillStyle(0xff0033, 0.15);
-    shadow.fillRoundedRect(-panelW/2 - 10, -panelH/2 - 10, panelW + 20, panelH + 20, 20);
+    shadow.fillRoundedRect(-panelW / 2 - 10, -panelH / 2 - 10, panelW + 20, panelH + 20, 20);
     mainContainer.add(shadow);
 
     const panel = this.add.graphics();
     panel.fillStyle(0x050505, 1);
-    panel.fillRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 16);
+    panel.fillRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 16);
     panel.lineStyle(4, 0xff0033, 1);
-    panel.strokeRoundedRect(-panelW/2, -panelH/2, panelW, panelH, 16);
+    panel.strokeRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 16);
     mainContainer.add(panel);
 
     const title = this.add.text(0, -35, "CONNECTION LOST", {
-        fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "42px", color: "#ff0033", letterSpacing: 2
+      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "42px", color: "#ff0033", letterSpacing: 2
     }).setOrigin(0.5);
 
     const msg = this.add.text(0, 35, "REESTABLISHING SECURE LINK...", {
-        fontFamily: "Courier New", fontSize: "24px", color: "#ffcc00", fontWeight: 'bold'
+      fontFamily: "Courier New", fontSize: "24px", color: "#ffcc00", fontWeight: "bold"
     }).setOrigin(0.5);
 
     mainContainer.add([title, msg]);
 
     const pulseTween = this.tweens.add({
-        targets: msg,
-        alpha: { start: 1, to: 0.3 },
-        duration: 500,
-        yoyo: true,
-        repeat: -1
+      targets: msg,
+      alpha: { start: 1, to: 0.3 },
+      duration: 500,
+      yoyo: true,
+      repeat: -1
     });
 
     this.reconnectOverlay = { dim, container: mainContainer, pulseTween };
