@@ -532,7 +532,7 @@ if (session.socket) {
     panel.strokeRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 24);
     mainContainer.add(panel);
 
-    const title = this.add.text(0, -panelH / 2 + 65, "MATCH HISTORY", {
+    const title = this.add.text(0, -panelH / 2 + 65, "MATCH HISTORYX", {
       fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "46px", color: "#ffcc00", letterSpacing: 3
     }).setOrigin(0.5);
     contents.push(title);
