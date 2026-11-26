@@ -17,6 +17,7 @@ export default class ConfigScene extends Phaser.Scene {
     this.cityLayer = null;
 
     this.waitOverlay = null;
+    this.buyInModal = null;
     this.cityRowTexts = [];
     this.pollTimer = null;
   }
@@ -54,15 +55,18 @@ export default class ConfigScene extends Phaser.Scene {
       if (payload.queued) {
         this.showManualWaitingMessage(payload);
       } else {
+        this.hideBuyInModal();
         this.hideWaitingOverlay();
         this.scene.start("GameScene", {
           username: this.username,
-          userData: { coins: this.coins },
+          userData: { coins: payload.walletCoins ?? this.coins },
           configId: payload.configId,
           cityIndex: payload.cityIndex,
           tableName: payload.tableName,
           cityName: payload.cityName,
           bootAmount: payload.bootAmount,
+          bootWallet: payload.bootWallet,
+          bootWalletMax: payload.bootWalletMax,
           sessionId: payload.sessionId,
           seatedPlayers: payload.seatedPlayers
         });
@@ -124,6 +128,11 @@ export default class ConfigScene extends Phaser.Scene {
     this.backBtn.on("pointerout", () => this.backBtn.setColor("#ffcc00").setScale(1));
 
     this.backBtn.on("pointerdown", () => {
+      if (this.buyInModal) {
+        if (this.sndClickClose) this.sndClickClose.play();
+        this.hideBuyInModal();
+        return;
+      }
       if (this.waitOverlay || this.cityPanelVisible) {
         if (this.sndClickClose) this.sndClickClose.play();
       } else {
@@ -160,6 +169,7 @@ export default class ConfigScene extends Phaser.Scene {
   }
 
   onSceneShutdown() {
+    this.hideBuyInModal();
     if (this.pollTimer) this.pollTimer.remove();
     if (session && session.socket) {
       session.socket.off("join_city_response");
@@ -529,7 +539,7 @@ export default class ConfigScene extends Phaser.Scene {
     this.cityRowTexts = [];
   }
 
-  handleJoinCity(table, cityIndex) {
+handleJoinCity(table, cityIndex) {
     if (!this.username) {
       AlertManager.show(this, "Login required", "AUTH ERROR");
       return;
@@ -539,10 +549,174 @@ export default class ConfigScene extends Phaser.Scene {
       AlertManager.show(this, `Minimum balance of ${minRequired.toLocaleString()} is needed`, "INSUFFICIENT FUNDS");
       return;
     }
-    this.queuedConfigId = table.id;
-    this.queuedCityIndex = cityIndex;
+    this.showBuyInModal(table, cityIndex);
+  }
 
-    session.socket.emit("join_city", { username: this.username, configId: table.id, cityIndex: cityIndex });
+  showBuyInModal(table, cityIndex) {
+    this.hideBuyInModal();
+
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const minBuy = Math.max(0, Number(table.boot_wallet || 0));
+    const maxCfg = Math.max(minBuy, Number(table.boot_wallet_max || table.pot_limit || minBuy));
+    const maxBuy = Math.min(this.coins, maxCfg);
+    const step = maxBuy - minBuy >= 2000 ? 100 : maxBuy - minBuy >= 200 ? 50 : 10;
+    const initialBuy = maxBuy;
+    const cityName = table.cities?.[cityIndex]?.city_name || "Table";
+
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setDepth(15000).setInteractive();
+    dim.on("pointerdown", p => p.event.stopPropagation());
+    dim.on("pointerup", p => p.event.stopPropagation());
+    this.tweens.add({ targets: dim, fillAlpha: 0.85, duration: 220 });
+
+    const html = `
+      <style>
+        #buyInSlider {
+          -webkit-appearance: none; appearance: none; width: 100%; height: 14px;
+          border-radius: 10px; outline: none; cursor: pointer;
+          border: 2px solid #444455;
+        }
+        #buyInSlider::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none; width: 34px; height: 34px;
+          border-radius: 50%; background: #ffcc00; border: 4px solid #ffffff;
+          box-shadow: 0 0 18px rgba(255, 0, 51, 0.9); cursor: pointer;
+        }
+        #buyInSlider::-moz-range-thumb {
+          width: 34px; height: 34px; border-radius: 50%; background: #ffcc00;
+          border: 4px solid #ffffff; box-shadow: 0 0 18px rgba(255, 0, 51, 0.9); cursor: pointer;
+        }
+        .buyin-preset {
+          flex: 1; padding: 10px 0; background: #12121a; border: 2px solid #ffcc00;
+          border-radius: 10px; color: #ffffff; cursor: pointer;
+          font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
+          font-size: 18px; letter-spacing: 1px;
+        }
+        .buyin-preset:active { transform: scale(0.95); }
+      </style>
+      <div style="
+        width: 720px; background: #050508; border: 3px solid #ffcc00; border-radius: 22px;
+        box-shadow: 0 0 42px rgba(255, 0, 51, 0.35), inset 0 0 0 1px rgba(255, 0, 51, 0.5);
+        padding: 32px 38px; box-sizing: border-box; user-select: none; color: #ffffff;
+      ">
+        <div style="text-align:center; margin-bottom: 6px; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size: 40px; color: #ff0033; letter-spacing: 3px;">
+          SELECT BUY-IN
+        </div>
+        <div style="text-align:center; margin-bottom: 24px; font-family:'Courier New', monospace; font-size: 19px; color: #ffcc00; font-weight: bold;">
+          ${table.table_name} • ${cityName} | WALLET: ${this.coins.toLocaleString()}
+        </div>
+
+        <div style="
+          background: #14080c; border: 2px solid #ffcc00; border-radius: 14px;
+          padding: 16px; text-align: center; margin-bottom: 24px;
+        ">
+          <div style="font-family:'Courier New', monospace; font-size: 15px; color: #ffcc00; letter-spacing: 2px; font-weight: bold;">
+            TABLE CHIPS TO BRING
+          </div>
+          <div id="buyInValueText" style="
+            font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size: 54px;
+            color: #ffffff; text-shadow: 0 0 16px rgba(255, 0, 51, 0.8); line-height: 1.1; margin-top: 4px;
+          ">${initialBuy.toLocaleString()}</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap: 16px; margin-bottom: 12px;">
+          <button id="buyInMinus" type="button" style="
+            width: 46px; height: 46px; border-radius: 50%; background: #161622;
+            border: 2px solid #ffcc00; color: #ffcc00; font-size: 26px; font-weight: bold; cursor: pointer;
+          ">−</button>
+          <input id="buyInSlider" type="range" min="${minBuy}" max="${maxBuy}" step="${step}" value="${initialBuy}" ${minBuy >= maxBuy ? "disabled" : ""} />
+          <button id="buyInPlus" type="button" style="
+            width: 46px; height: 46px; border-radius: 50%; background: #161622;
+            border: 2px solid #ffcc00; color: #ffcc00; font-size: 26px; font-weight: bold; cursor: pointer;
+          ">+</button>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; font-family:'Courier New', monospace; font-size: 16px; color: #bbbbbb; font-weight: bold; margin-bottom: 22px;">
+          <span>MIN: ${minBuy.toLocaleString()}</span>
+          <span>MAX: ${maxBuy.toLocaleString()}</span>
+        </div>
+
+        <div style="display:flex; gap: 14px; margin-bottom: 28px;">
+          <button class="buyin-preset" data-pct="0" style="border-color:#00ff88;">MIN</button>
+          <button class="buyin-preset" data-pct="0.5" style="border-color:#00e5ff;">50%</button>
+          <button class="buyin-preset" data-pct="1" style="border-color:#ff0033;">MAX</button>
+        </div>
+
+        <div style="display:flex; gap: 18px;">
+          <button id="buyInCancel" type="button" style="
+            flex: 1; height: 58px; border-radius: 12px; background: #29070d; border: 2px solid #ff0033;
+            color: #ff5c77; font-family:'Anton', Impact, 'sans-serif-black', sans-serif;
+            font-size: 24px; letter-spacing: 2px; cursor: pointer;
+          ">CANCEL</button>
+          <button id="buyInConfirm" type="button" style="
+            flex: 1.5; height: 58px; border-radius: 12px; background: #072b14; border: 2px solid #00ff88;
+            color: #5bffb0; font-family:'Anton', Impact, 'sans-serif-black', sans-serif;
+            font-size: 24px; letter-spacing: 2px; cursor: pointer;
+          ">JOIN TABLE</button>
+        </div>
+      </div>
+    `;
+
+    const dom = this.add.dom(w / 2, h / 2).createFromHTML(html).setDepth(15001);
+    const slider = dom.getChildByID("buyInSlider");
+    const valText = dom.getChildByID("buyInValueText");
+    let chosenAmount = initialBuy;
+
+    const syncSlider = nextVal => {
+      chosenAmount = Phaser.Math.Clamp(Math.round(nextVal), minBuy, maxBuy);
+      if (slider) {
+        slider.value = chosenAmount;
+        const pct = maxBuy <= minBuy ? 100 : ((chosenAmount - minBuy) / (maxBuy - minBuy)) * 100;
+        slider.style.background = `linear-gradient(90deg, #ff0033 0%, #ffcc00 ${pct}%, #14141c ${pct}%)`;
+      }
+      if (valText) valText.textContent = chosenAmount.toLocaleString();
+    };
+    syncSlider(initialBuy);
+
+    if (slider) {
+      slider.addEventListener("input", e => syncSlider(Number(e.target.value)));
+    }
+
+    dom.addListener("click");
+    dom.on("click", event => {
+      const el = event.target;
+      if (!el) return;
+
+      if (el.id === "buyInMinus") {
+        if (this.sndClick) this.sndClick.play();
+        syncSlider(chosenAmount - step);
+      } else if (el.id === "buyInPlus") {
+        if (this.sndClick) this.sndClick.play();
+        syncSlider(chosenAmount + step);
+      } else if (el.classList && el.classList.contains("buyin-preset")) {
+        if (this.sndClick) this.sndClick.play();
+        const pct = Number(el.getAttribute("data-pct") || 0);
+        syncSlider(minBuy + (maxBuy - minBuy) * pct);
+      } else if (el.id === "buyInCancel") {
+        if (this.sndClickClose) this.sndClickClose.play();
+        this.hideBuyInModal();
+      } else if (el.id === "buyInConfirm") {
+        if (this.sndClick) this.sndClick.play();
+        el.disabled = true;
+        this.queuedConfigId = table.id;
+        this.queuedCityIndex = cityIndex;
+        this.hideBuyInModal();
+        session.socket.emit("join_city", {
+          username: this.username,
+          configId: table.id,
+          cityIndex,
+          buyInAmount: chosenAmount
+        });
+      }
+    });
+
+    this.buyInModal = { dim, dom };
+  }
+
+  hideBuyInModal() {
+    if (!this.buyInModal) return;
+    if (this.buyInModal.dom) this.buyInModal.dom.destroy();
+    if (this.buyInModal.dim) this.buyInModal.dim.destroy();
+    this.buyInModal = null;
   }
 
   showManualWaitingMessage(payload) {

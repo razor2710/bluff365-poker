@@ -83,6 +83,9 @@ export default class GameScene extends Phaser.Scene {
     this.minRaiseIncrement =
       data.minRaiseIncrement ?? (this.table ? this.table.minRaiseIncrement : this.smallBlind);
     this.maxPot = data.maxPot ?? (this.table ? this.table.maxPot : 0);
+    this.bootWallet = data.bootWallet ?? (this.table ? this.table.bootWallet : this.bigBlind * 10);
+    this.bootWalletMax = data.bootWalletMax ?? (this.table ? this.table.bootWalletMax : this.maxPot);
+    this.topUpModal = null;
     this.pot = data.pot ?? (this.table ? this.table.pot : this.smallBlind + this.bigBlind);
     this.currentPhase = data.phase || (this.table ? this.table.phase : "preflop");
 
@@ -346,6 +349,9 @@ export default class GameScene extends Phaser.Scene {
     session.socket.off("match_found");
     session.socket.on("match_found", payload => {
       this.hideWaitingOverlay();
+      this.hideTopUpModal();
+      if (payload.bootWallet !== undefined) this.bootWallet = payload.bootWallet;
+      if (payload.bootWalletMax !== undefined) this.bootWalletMax = payload.bootWalletMax;
       this.resetTable();
 
       this.sessionId = payload.sessionId;
@@ -568,6 +574,25 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
+    session.socket.off("topup_table_response");
+    session.socket.on("topup_table_response", payload => {
+      if (!payload) return;
+      if (!payload.success) {
+        if (AlertManager.showToastx) AlertManager.showToastx(this, payload.message || "Top-up unavailable");
+        return;
+      }
+      if (payload.walletCoins !== undefined) this.userData.coins = payload.walletCoins;
+      const mePlayer = this.players.find(p => p.username.toLowerCase() === this.username);
+      if (mePlayer) {
+        mePlayer.coins = payload.tableCoins;
+        this.updatePlayerCoinsUI();
+      }
+      this.hideTopUpModal();
+      if (AlertManager.showToastx) {
+        AlertManager.showToastx(this, `TABLE CHIPS: ${Number(payload.tableCoins).toLocaleString()}`);
+      }
+    });
+
     session.socket.off("city_waiting_update");
     session.socket.on("city_waiting_update", payload => {
       if (!this.scene.isActive() || this.isPrivate) return;
@@ -582,6 +607,8 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
       if (payload.maxPot) this.maxPot = payload.maxPot;
+      if (payload.bootWallet !== undefined) this.bootWallet = payload.bootWallet;
+      if (payload.bootWalletMax !== undefined) this.bootWalletMax = payload.bootWalletMax;
       this.players = payload.seatedPlayers || [];
       this.resetTable();
       this.buildPlayersAndSeats();
@@ -2113,7 +2140,7 @@ export default class GameScene extends Phaser.Scene {
     }, 550);
   }
 
-  showWaitingOverlay(payload) {
+showWaitingOverlay(payload) {
     const w = this.scale.width;
     const h = this.scale.height;
 
@@ -2122,9 +2149,12 @@ export default class GameScene extends Phaser.Scene {
     if (this.waitOverlay && this.waitOverlay.cachedPhase !== payload.phase) this.hideWaitingOverlay();
 
     if (!this.waitOverlay) {
-      const dim = this.add.rectangle(w / 2, h / 2 - 20, 500, 220, 0x000000, 0.8).setDepth(2000);
+      const dim = this.add.rectangle(w / 2, h / 2 - 10, 520, 260, 0x000000, 0.84).setDepth(2000);
+      const border = this.add.graphics().setDepth(2000);
+      border.lineStyle(2.5, 0xffcc00, 0.9).strokeRoundedRect(w / 2 - 260, h / 2 - 140, 520, 260, 18);
+
       const title = this.add
-        .text(w / 2, h / 2 - 80, "", {
+        .text(w / 2, h / 2 - 96, "", {
           fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "28px",
           color: "#ffd700",
@@ -2134,7 +2164,7 @@ export default class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(2001);
       const body = this.add
-        .text(w / 2, h / 2 - 20, "", {
+        .text(w / 2, h / 2 - 42, "", {
           fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "32px",
           color: "#ffffff",
@@ -2145,7 +2175,7 @@ export default class GameScene extends Phaser.Scene {
         .setOrigin(0.5)
         .setDepth(2001);
       const sub = this.add
-        .text(w / 2, h / 2 + 30, "", {
+        .text(w / 2, h / 2 + 8, "", {
           fontFamily: "Arial",
           fontSize: "22px",
           color: "#dbe7ff",
@@ -2155,7 +2185,7 @@ export default class GameScene extends Phaser.Scene {
         .setDepth(2001);
 
       const startBtn = this.add
-        .text(w / 2, h / 2 + 80, "START GAME", {
+        .text(w / 2, h / 2 + 72, "START GAME", {
           fontFamily: '"Arial Black", "sans-serif-black", sans-serif',
           fontSize: "24px",
           color: "#44ff44",
@@ -2170,7 +2200,28 @@ export default class GameScene extends Phaser.Scene {
         session.socket.emit("start_private_room", { roomId: this.roomId, username: this.username })
       );
 
-      this.waitOverlay = { dim, title, body, sub, startBtn, cachedPhase: payload.phase };
+      // Aesthetic "+ ADD BALANCE" Top-Up Pill shown during 10s countdown when below max buy-in
+      const topUpCont = this.add.container(w / 2, h / 2 + 74).setDepth(2002).setVisible(false);
+      const topUpBg = this.add.graphics();
+      topUpBg.fillStyle(0x072b14, 1).fillRoundedRect(-145, -24, 290, 48, 12);
+      topUpBg.lineStyle(2, 0x00ff88, 1).strokeRoundedRect(-145, -24, 290, 48, 12);
+      const topUpTxt = this.add
+        .text(0, 0, "+ ADD BALANCE", {
+          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif',
+          fontSize: "22px",
+          color: "#5bffb0",
+          stroke: "#000000",
+          strokeThickness: 3
+        })
+        .setOrigin(0.5);
+      const topUpZone = this.add.zone(0, 0, 290, 48).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      topUpZone.on("pointerdown", () => {
+        if (this.sndClick) this.sndClick.play();
+        this.showTopUpModal();
+      });
+      topUpCont.add([topUpBg, topUpTxt, topUpZone]);
+
+      this.waitOverlay = { dim, border, title, body, sub, startBtn, topUpCont, cachedPhase: payload.phase };
     }
 
     if (payload.phase === "waiting_240") {
@@ -2188,22 +2239,148 @@ export default class GameScene extends Phaser.Scene {
 
     this.setTextSafe(this.waitOverlay.sub, `Players Ready: ${payload.activePlayers}/5`);
     const isHost = this.username.toLowerCase() === (this.hostUsername || "").toLowerCase();
-    if (this.isPrivate && isHost && payload.phase === "waiting_240" && payload.activePlayers >= 2) {
-      this.waitOverlay.startBtn.setVisible(true);
-    } else {
-      this.waitOverlay.startBtn.setVisible(false);
-    }
+    const showHostStart = this.isPrivate && isHost && payload.phase === "waiting_240" && payload.activePlayers >= 2;
+    this.waitOverlay.startBtn.setVisible(showHostStart);
+
+    // Show "+ ADD BALANCE" during countdown/waiting if player's current table stack is below max allowed buy-in
+    const me = this.players.find(p => p.username.toLowerCase() === this.username);
+    const currentStack = me ? Number(me.coins || 0) : 0;
+    const walletCoins = Number(this.userData.coins || 0);
+    const maxAllowed = Math.min(walletCoins, Math.max(Number(this.bootWallet || 0), Number(this.bootWalletMax || 0)));
+    const canTopUp = !this.isPrivate && !showHostStart && maxAllowed > currentStack;
+    this.waitOverlay.topUpCont.setVisible(canTopUp);
   }
 
   hideWaitingOverlay() {
     if (this.waitOverlay) {
       this.waitOverlay.dim.destroy();
+      if (this.waitOverlay.border) this.waitOverlay.border.destroy();
       this.waitOverlay.title.destroy();
       this.waitOverlay.body.destroy();
       this.waitOverlay.sub.destroy();
       this.waitOverlay.startBtn.destroy();
+      if (this.waitOverlay.topUpCont) this.waitOverlay.topUpCont.destroy();
       this.waitOverlay = null;
     }
+  }
+
+  showTopUpModal() {
+    this.hideTopUpModal();
+    const me = this.players.find(p => p.username.toLowerCase() === this.username);
+    const currentStack = me ? Math.max(0, Number(me.coins || 0)) : 0;
+    const walletCoins = Math.max(0, Number(this.userData.coins || 0));
+    const minCfg = Math.max(0, Number(this.bootWallet || 0));
+    const maxCfg = Math.max(minCfg, Number(this.bootWalletMax || minCfg));
+    const maxTarget = Math.min(walletCoins, maxCfg);
+    const minTarget = Math.min(maxTarget, Math.max(currentStack, minCfg));
+
+    if (maxTarget <= currentStack) return;
+
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const step = maxTarget - minTarget >= 2000 ? 100 : maxTarget - minTarget >= 200 ? 50 : 10;
+    let targetVal = maxTarget;
+
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.78).setDepth(9000).setInteractive();
+
+    const html = `
+      <style>
+        #topUpSlider {
+          -webkit-appearance: none; appearance: none; width: 100%; height: 14px;
+          border-radius: 10px; outline: none; cursor: pointer; border: 2px solid #444455;
+        }
+        #topUpSlider::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none; width: 32px; height: 32px;
+          border-radius: 50%; background: #ffcc00; border: 4px solid #ffffff;
+          box-shadow: 0 0 16px rgba(0, 255, 136, 0.9); cursor: pointer;
+        }
+      </style>
+      <div style="
+        width: 640px; background: #050508; border: 3px solid #ffcc00; border-radius: 22px;
+        box-shadow: 0 0 38px rgba(0, 255, 136, 0.25); padding: 28px 34px; box-sizing: border-box;
+        user-select: none; color: #ffffff;
+      ">
+        <div style="text-align:center; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size: 36px; color: #00ff88; letter-spacing: 3px;">
+          TOP-UP TABLE BALANCE
+        </div>
+        <div style="text-align:center; margin: 6px 0 20px 0; font-family:'Courier New', monospace; font-size: 17px; color: #ffcc00; font-weight: bold;">
+          CURRENT: ${currentStack.toLocaleString()} | WALLET: ${walletCoins.toLocaleString()}
+        </div>
+
+        <div style="background:#101a14; border:2px solid #00ff88; border-radius:14px; padding:14px; text-align:center; margin-bottom:20px;">
+          <div id="topUpAddBadge" style="font-family:'Courier New', monospace; font-size:16px; color:#5bffb0; font-weight:bold;">
+            ADDING: +${(targetVal - currentStack).toLocaleString()}
+          </div>
+          <div id="topUpTargetText" style="font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size:48px; color:#ffffff; line-height:1.1; margin-top:4px;">
+            ${targetVal.toLocaleString()}
+          </div>
+        </div>
+
+        <input id="topUpSlider" type="range" min="${minTarget}" max="${maxTarget}" step="${step}" value="${targetVal}" />
+        <div style="display:flex; justify-content:space-between; font-family:'Courier New', monospace; font-size:15px; color:#bbbbbb; font-weight:bold; margin: 10px 0 22px 0;">
+          <span>MIN: ${minTarget.toLocaleString()}</span>
+          <span>MAX: ${maxTarget.toLocaleString()}</span>
+        </div>
+
+        <div style="display:flex; gap:16px;">
+          <button id="topUpCancel" type="button" style="
+            flex:1; height:52px; border-radius:12px; background:#29070d; border:2px solid #ff0033;
+            color:#ff5c77; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size:22px; letter-spacing:2px; cursor:pointer;
+          ">CANCEL</button>
+          <button id="topUpConfirm" type="button" style="
+            flex:1.4; height:52px; border-radius:12px; background:#072b14; border:2px solid #00ff88;
+            color:#5bffb0; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size:22px; letter-spacing:2px; cursor:pointer;
+          ">CONFIRM TOP-UP</button>
+        </div>
+      </div>
+    `;
+
+    const dom = this.add.dom(w / 2, h / 2).createFromHTML(html).setDepth(9001);
+    const slider = dom.getChildByID("topUpSlider");
+    const targetText = dom.getChildByID("topUpTargetText");
+    const addBadge = dom.getChildByID("topUpAddBadge");
+
+    const syncTopUp = nextVal => {
+      targetVal = Phaser.Math.Clamp(Math.round(nextVal), minTarget, maxTarget);
+      const pct = maxTarget <= minTarget ? 100 : ((targetVal - minTarget) / (maxTarget - minTarget)) * 100;
+      if (slider) {
+        slider.value = targetVal;
+        slider.style.background = `linear-gradient(90deg, #00ff88 0%, #ffcc00 ${pct}%, #14141c ${pct}%)`;
+      }
+      if (targetText) targetText.textContent = targetVal.toLocaleString();
+      if (addBadge) addBadge.textContent = `ADDING: +${Math.max(0, targetVal - currentStack).toLocaleString()}`;
+    };
+    syncTopUp(maxTarget);
+
+    if (slider) {
+      slider.addEventListener("input", e => syncTopUp(Number(e.target.value)));
+    }
+
+    dom.addListener("click");
+    dom.on("click", event => {
+      if (event.target.id === "topUpCancel") {
+        if (this.sndClickClose) this.sndClickClose.play();
+        this.hideTopUpModal();
+      } else if (event.target.id === "topUpConfirm") {
+        if (this.sndClick) this.sndClick.play();
+        event.target.disabled = true;
+        session.socket.emit("topup_table_balance", {
+          username: this.username,
+          configId: this.configId,
+          cityIndex: this.cityIndex,
+          targetTableCoins: targetVal
+        });
+      }
+    });
+
+    this.topUpModal = { dim, dom };
+  }
+
+  hideTopUpModal() {
+    if (!this.topUpModal) return;
+    if (this.topUpModal.dom) this.topUpModal.dom.destroy();
+    if (this.topUpModal.dim) this.topUpModal.dim.destroy();
+    this.topUpModal = null;
   }
 
   animateJoinMoney() {
