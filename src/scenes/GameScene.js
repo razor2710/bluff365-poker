@@ -48,6 +48,8 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
 
+
+    this._isExitingToLobby = false;
     this.waitOverlay = null;
     this.sessionId = data.sessionId || null;
     this.userData = data.userData || data || {};
@@ -678,22 +680,17 @@ export default class GameScene extends Phaser.Scene {
       );
     });
 
-    session.socket.off("force_exit_low_balance");
+ session.socket.off("force_exit_low_balance");
     session.socket.on("force_exit_low_balance", payload => {
+      if (payload?.walletCoins !== undefined) {
+        this.userData.coins = payload.walletCoins;
+      }
       this.hideTopUpModal();
       this.hideWaitingOverlay();
-      AlertManager.show(
-        this,
+      this.hideCyberWinnerDialog(true);
+      this.showForceExitDialog(
         "LOW BALANCE",
-        payload?.message || "Insufficient balance for next round.",
-        () => {
-          this.time.removeAllEvents();
-          this.tweens.killAll();
-          session.cleanupGameListeners();
-          this.resetTable();
-          this.scene.start("LobbyScene", { username: this.username, coins: this.userData.coins });
-        },
-        "OK"
+        payload?.message || "Insufficient balance for next round. Returning to lobby."
       );
     });
 
@@ -2279,12 +2276,17 @@ export default class GameScene extends Phaser.Scene {
     this.waitOverlay.startBtn.setVisible(showHostStart);
 
     // Show "+ ADD BALANCE" during countdown/waiting if player's current table stack is below max allowed buy-in
+   // Hide "+ ADD BALANCE" whenever table stack is already >= boot_wallet_max (e.g., won 5,000 on a 2,500 max table)
     const me = this.players.find(p => p.username.toLowerCase() === this.username);
     const currentStack = me ? Number(me.coins || 0) : 0;
     const walletCoins = Number(this.userData.coins || 0);
-    const maxAllowed = Math.min(walletCoins, Math.max(Number(this.bootWallet || 0), Number(this.bootWalletMax || 0)));
-    const canTopUp = !this.isPrivate && !showHostStart && maxAllowed > currentStack;
+    const bootMax = Math.max(Number(this.bootWallet || 0), Number(this.bootWalletMax || 0));
+    const maxAllowed = Math.min(walletCoins, bootMax);
+    const canTopUp = !this.isPrivate && !showHostStart && currentStack < bootMax && maxAllowed > currentStack;
     this.waitOverlay.topUpCont.setVisible(canTopUp);
+    if (!canTopUp && this.topUpModal) {
+      this.hideTopUpModal();
+    }
   }
 
   hideWaitingOverlay() {
@@ -2310,7 +2312,7 @@ export default class GameScene extends Phaser.Scene {
     const maxTarget = Math.min(walletCoins, maxCfg);
     const minTarget = Math.min(maxTarget, Math.max(currentStack, minCfg));
 
-    if (maxTarget <= currentStack) return;
+    if (currentStack >= maxCfg || maxTarget <= currentStack) return;
 
     const w = this.scale.width;
     const h = this.scale.height;
@@ -2451,6 +2453,91 @@ export default class GameScene extends Phaser.Scene {
     if (this.topUpModal.dom) this.topUpModal.dom.destroy();
     if (this.topUpModal.dim) this.topUpModal.dim.destroy();
     this.topUpModal = null;
+  }
+
+
+  showForceExitDialog(titleText, messageText) {
+    if (this._isExitingToLobby) return;
+    this._isExitingToLobby = true;
+
+    const w = this.scale.width;
+    const h = this.scale.height;
+
+    const overlay = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.85).setDepth(19999).setInteractive();
+
+    const html = `
+      <div style="
+        width: 580px; background: #050508; border: 3px solid #ff0033; border-radius: 20px;
+        box-shadow: 0 0 40px rgba(255, 0, 51, 0.45); padding: 30px 34px; box-sizing: border-box;
+        text-align: center; user-select: none; color: #ffffff;
+      ">
+        <div style="
+          font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
+          font-size: 36px; color: #ff0033; letter-spacing: 3px; margin-bottom: 14px;
+        ">${titleText}</div>
+
+        <div style="
+          font-family: 'Courier New', monospace; font-size: 19px; color: #ffcc00;
+          font-weight: bold; line-height: 1.5; margin-bottom: 24px;
+        ">${messageText}</div>
+
+        <div id="autoExitCountdown" style="
+          font-family: 'Courier New', monospace; font-size: 15px; color: #bbbbbb;
+          margin-bottom: 22px;
+        ">Returning to lobby in 4s...</div>
+
+        <button id="forceExitOkBtn" type="button" style="
+          background: #29070d; border: 2px solid #ff0033; border-radius: 10px;
+          padding: 12px 42px; color: #ff5c77; cursor: pointer; outline: none;
+          font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
+          font-size: 22px; letter-spacing: 2px;
+        ">OK</button>
+      </div>
+    `;
+
+    const dialogDOM = this.add.dom(w / 2, h / 2).createFromHTML(html).setDepth(20000);
+    const countdownEl = dialogDOM.getChildByID("autoExitCountdown");
+
+    let leftSec = 4;
+    let exited = false;
+    let intervalId = null;
+
+    const exitToLobby = () => {
+      if (exited) return;
+      exited = true;
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+      if (dialogDOM) dialogDOM.destroy();
+      if (overlay) overlay.destroy();
+
+      this.hideTopUpModal();
+      this.hideWaitingOverlay();
+      this.time.removeAllEvents();
+      this.tweens.killAll();
+      session.cleanupGameListeners();
+      this.resetTable();
+      this.scene.start("LobbyScene", { username: this.username, coins: this.userData.coins });
+    };
+
+    intervalId = setInterval(() => {
+      leftSec -= 1;
+      if (leftSec <= 0) {
+        exitToLobby();
+      } else if (countdownEl) {
+        countdownEl.textContent = `Returning to lobby in ${leftSec}s...`;
+      }
+    }, 1000);
+
+    dialogDOM.addListener("click");
+    dialogDOM.on("click", event => {
+      if (event.target && event.target.id === "forceExitOkBtn") {
+        if (this.sndClickClose) this.sndClickClose.play();
+        event.target.disabled = true;
+        exitToLobby();
+      }
+    });
   }
 
   animateJoinMoney() {
