@@ -66,7 +66,7 @@ export default class LobbyScene extends Phaser.Scene {
     this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.08);
 
     // ==========================================
-    // TOP COINS PANEL (REVERTED TO ORIGINAL)
+    // TOP COINS PANEL
     // ==========================================
     const coinsHolder = this.add.image(270, 65, "top_coins");
     coinsHolder.setDisplaySize(546, 110);
@@ -89,7 +89,7 @@ export default class LobbyScene extends Phaser.Scene {
     this.coinsText.setDepth(1);
 
     // ==========================================
-    // TOP PROFILE PANEL (REVERTED TO ORIGINAL WITH LIME GREEN OUTLINE)
+    // TOP PROFILE PANEL (LIME GREEN OUTLINE)
     // ==========================================
     const profileNameText = this.add.text(0, 0, username, {
       fontFamily: "Arial Black", fontSize: "36px", color: "#ffffff", stroke: "#000000", strokeThickness: 2
@@ -161,7 +161,7 @@ export default class LobbyScene extends Phaser.Scene {
     });
 
     // ==========================================
-    // MAIN MENU BUTTONS (REVERTED TO ORIGINAL WITHOUT HOVER)
+    // MAIN MENU BUTTONS
     // ==========================================
     const buttonY = h * 0.68;
     const buttonWidth = 650;
@@ -200,13 +200,14 @@ export default class LobbyScene extends Phaser.Scene {
           const hasChanged = JSON.stringify(this.userHistory || []) !== JSON.stringify(nextHistory);
           this.userHistory = nextHistory;
 
-          // Only refresh open dialog if new match entries actually arrived, and skip re-animating
+          // Update open history dialog in-place without closing/reopening or losing scroll position
           if (this.settingsDialog && !this.settingsDialog.isClosing && hasChanged) {
-            const currentScrollY = this.settingsDialog.content
-              ? (this.settingsDialog.content.y - this.settingsDialog.baseY)
-              : 0;
-            this.closeSettingsDialog(true);
-            this.showSettingsDialog(currentScrollY, true);
+            const listBody = this.settingsDialog.listBody;
+            if (listBody) {
+              const prevScrollTop = listBody.scrollTop;
+              listBody.innerHTML = this.buildHistoryRowsHTML(this.userHistory);
+              listBody.scrollTop = prevScrollTop;
+            }
           }
         }
       });
@@ -361,7 +362,7 @@ export default class LobbyScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setDepth(6000).setInteractive();
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 1).setAlpha(0).setDepth(6000).setInteractive();
     const mainContainer = this.add.container(w / 2, h / 2).setDepth(6001);
     const contents = [];
 
@@ -474,13 +475,115 @@ export default class LobbyScene extends Phaser.Scene {
     }
   }
 
+  escapeHtml(str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  buildHistoryRowsHTML(history) {
+    if (!history || history.length === 0) {
+      return `
+        <div style="
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: 'Courier New', monospace;
+          font-size: 30px;
+          font-weight: bold;
+          color: #ffffff;
+          letter-spacing: 2px;
+        ">NO RECENT MATCHES.</div>
+      `;
+    }
+
+    return history
+      .map(match => {
+        const isWin = match.result === "win";
+        const bgColor = isWin ? "#112211" : "#220505";
+        const borderColor = isWin ? "#00ff88" : "#ff0033";
+        const textColor = isWin ? "#00ff88" : "#ff0033";
+
+        const sid = this.escapeHtml(match.sessionId || "Unknown");
+        const table = this.escapeHtml(match.tableName || "Unknown");
+        const city = this.escapeHtml(match.cityName || "Unknown");
+        const dateStr = this.escapeHtml(
+          match.startedAt ? new Date(match.startedAt).toLocaleString() : "Unknown Date"
+        );
+        const potVal = Number(match.pot || 0).toLocaleString();
+        const invVal = Number(match.invested || 0).toLocaleString();
+        const netVal = `${isWin ? "+" : "-"}${Math.abs(Number(match.netChange || 0)).toLocaleString()}`;
+
+        return `
+          <div style="
+            background: ${bgColor};
+            border: 2px solid ${borderColor};
+            border-radius: 12px;
+            padding: 18px 26px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            flex-shrink: 0;
+          ">
+            <div style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              gap: 16px;
+              font-family: 'Courier New', monospace;
+              font-size: 21px;
+              font-weight: bold;
+            ">
+              <span style="color: #ffffff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                ID: ${sid} | ${table} (${city})
+              </span>
+              <span style="color: #bbbbbb; font-weight: normal; white-space: nowrap;">
+                ${dateStr}
+              </span>
+            </div>
+
+            <div style="
+              display: grid;
+              grid-template-columns: 1fr auto 1fr;
+              align-items: center;
+            ">
+              <span style="
+                font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
+                font-size: 32px;
+                color: ${textColor};
+                letter-spacing: 2px;
+                text-align: left;
+              ">${isWin ? "VICTORY" : "DEFEAT"}</span>
+
+              <span style="
+                font-family: 'Courier New', monospace;
+                font-size: 23px;
+                font-weight: bold;
+                color: #ffcc00;
+                text-align: center;
+              ">Pot: ${potVal} | Inv: ${invVal}</span>
+
+              <span style="
+                font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
+                font-size: 32px;
+                color: ${textColor};
+                text-align: right;
+              ">${netVal}</span>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
   // ==========================================
-  // MATCH HISTORY DIALOG
+  // MATCH HISTORY DIALOG (STRICT CSS CLIPPING + NATIVE TOUCH SCROLL)
   // ==========================================
-// ==========================================
-  // MATCH HISTORY DIALOG
-  // ==========================================
-  showSettingsDialog(restoreScrollY = 0, skipEntrance = false) {
+  showSettingsDialog() {
     if (this.settingsDialog) return;
     this.playBtn?.disableInteractive();
     this.joinBtn?.disableInteractive();
@@ -489,205 +592,214 @@ export default class LobbyScene extends Phaser.Scene {
     const w = this.scale.width;
     const h = this.scale.height;
 
-    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, skipEntrance ? 0.85 : 0).setDepth(4000).setInteractive();
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0).setDepth(4000).setInteractive();
+    dim.on("pointerdown", pointer => pointer.event.stopPropagation());
+    dim.on("pointerup", pointer => pointer.event.stopPropagation());
 
-    const mainContainer = this.add.container(w / 2, h / 2).setDepth(4001);
-    const contents = [];
+    this.tweens.add({
+      targets: dim,
+      fillAlpha: 0.85,
+      duration: 280,
+      ease: "Linear"
+    });
 
-    const panelW = 1150;
-    const panelH = 820;
+    const rowsHtml = this.buildHistoryRowsHTML(this.userHistory);
 
-    const shadow = this.add.graphics();
-    shadow.fillStyle(0xffcc00, 0.15);
-    shadow.fillRoundedRect(-panelW / 2 - 10, -panelH / 2 - 10, panelW + 20, panelH + 20, 24);
-    mainContainer.add(shadow);
+    const html = `
+      <style>
+        #historyListBody::-webkit-scrollbar { width: 8px; }
+        #historyListBody::-webkit-scrollbar-track { background: #111111; border-radius: 6px; }
+        #historyListBody::-webkit-scrollbar-thumb { background: #ffcc00; border-radius: 6px; }
+      </style>
+      <div id="historyDialogOuter" style="
+        width: 1150px;
+        height: 820px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        user-select: none;
+        -webkit-user-select: none;
+      ">
+        <div id="historyDialogWrapper" style="
+          width: 4px;
+          height: 820px;
+          background: #050505;
+          border: 4px solid #ffcc00;
+          border-radius: 24px;
+          box-shadow: 0 0 36px rgba(255, 204, 0, 0.28);
+          overflow: hidden;
+          box-sizing: border-box;
+          display: flex;
+          flex-direction: column;
+          will-change: transform, width;
+          backface-visibility: hidden;
+          -webkit-backface-visibility: hidden;
+          transform: translate3d(0, 100vh, 0);
+          transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.15),
+                      width 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+        ">
+          <div id="historyDialogContent" style="
+            width: 1142px;
+            height: 100%;
+            opacity: 0;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+            transition: opacity 0.18s linear;
+          ">
+            <!-- FIXED HEADER (ALWAYS ON TOP, NEVER COVERED BY LIST) -->
+            <div style="
+              position: relative;
+              height: 114px;
+              flex-shrink: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              border-bottom: 2px solid rgba(255, 204, 0, 0.3);
+              background: #050505;
+              box-sizing: border-box;
+            ">
+              <div style="
+                font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
+                font-size: 46px;
+                color: #ffcc00;
+                letter-spacing: 3px;
+                line-height: 1;
+              ">MATCH HISTORY</div>
 
-    const panel = this.add.graphics();
-    panel.fillStyle(0x050505, 1);
-    panel.fillRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 24);
-    panel.lineStyle(4, 0xffcc00, 1);
-    panel.strokeRoundedRect(-panelW / 2, -panelH / 2, panelW, panelH, 24);
-    mainContainer.add(panel);
+              <button id="historyCloseBtn" type="button" style="
+                position: absolute;
+                right: 24px;
+                top: 50%;
+                transform: translateY(-50%);
+                width: 64px;
+                height: 64px;
+                background: transparent;
+                border: none;
+                font-family: 'Anton', Impact, 'sans-serif-black', sans-serif;
+                font-size: 42px;
+                color: #ff0033;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                outline: none;
+                padding: 0;
+              ">X</button>
+            </div>
 
-    const title = this.add.text(0, -panelH / 2 + 65, "MATCH HISTORY", {
-      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "46px", color: "#ffcc00", letterSpacing: 3
-    }).setOrigin(0.5);
-    contents.push(title);
+            <!-- STRICTLY CLIPPED SCROLLABLE LIST VIEWPORT -->
+            <div id="historyListBody" style="
+              flex: 1;
+              min-height: 0;
+              overflow-y: auto;
+              overflow-x: hidden;
+              -webkit-overflow-scrolling: touch;
+              touch-action: pan-y;
+              padding: 20px 26px 24px 26px;
+              box-sizing: border-box;
+              display: flex;
+              flex-direction: column;
+              gap: 18px;
+            ">${rowsHtml}</div>
+          </div>
+        </div>
+      </div>
+    `;
 
-    const closeBtn = this.add.text(panelW / 2 - 50, -panelH / 2 + 50, "X", {
-      fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "40px", color: "#ff0033"
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const dialogDOM = this.add.dom(w / 2, h / 2).createFromHTML(html).setDepth(4001);
+    const wrapper = dialogDOM.getChildByID("historyDialogWrapper");
+    const contentEl = dialogDOM.getChildByID("historyDialogContent");
+    const listBody = dialogDOM.getChildByID("historyListBody");
 
-    closeBtn.on("pointerover", () => closeBtn.setScale(1.2));
-    closeBtn.on("pointerout", () => closeBtn.setScale(1));
-    contents.push(closeBtn);
-
-    mainContainer.add(contents);
-
-    const listX = -panelW / 2 + 25;
-    const listY = -panelH / 2 + 130;
-    const listW = panelW - 50;
-    const listH = panelH - 170;
-
-    // World coordinates of the clip viewport (below "MATCH HISTORY" and above panel bottom)
-    const viewportX = w / 2 + listX;
-    const viewportY = h / 2 + listY;
-
-    // Keep scrollable content on the scene root (NOT inside mainContainer) so Phaser applies the GeometryMask
-    const content = this.add.container(viewportX, viewportY).setDepth(4002);
-
-    const maskShape = this.make.graphics({ x: 0, y: 0, add: false });
-    maskShape.fillStyle(0xffffff);
-    maskShape.fillRect(viewportX, viewportY, listW, listH);
-    const listMask = maskShape.createGeometryMask();
-    content.setMask(listMask);
-
-    let currentY = 0;
-    const rowH = 120;
-    const rowGap = 20;
-
-    if (!this.userHistory || this.userHistory.length === 0) {
-      const noData = this.add.text(listW / 2, 130, "NO RECENT MATCHES.", {
-        fontFamily: "Courier New", fontSize: "33px", color: "#ffffff", fontWeight: "bold"
-      }).setOrigin(0.5);
-      content.add(noData);
-    } else {
-      this.userHistory.forEach(match => {
-        const y = currentY;
-        const isWin = match.result === "win";
-        const rowColor = isWin ? 0x112211 : 0x220505;
-        const strokeColor = isWin ? 0x00ff88 : 0xff0033;
-        const textColor = isWin ? "#00ff88" : "#ff0033";
-
-        const rowContainer = this.add.container(0, y);
-
-        const row = this.add.graphics();
-        row.fillStyle(rowColor, 1).fillRoundedRect(0, 0, listW, rowH, 12);
-        row.lineStyle(2, strokeColor, 1).strokeRoundedRect(0, 0, listW, rowH, 12);
-
-        const sid = match.sessionId || "Unknown";
-        const table = match.tableName || "Unknown";
-        const city = match.cityName || "Unknown";
-        const dateStr = match.startedAt ? new Date(match.startedAt).toLocaleString() : "Unknown Date";
-
-        const t1 = this.add.text(26, 25, `ID: ${sid} | ${table} (${city})`, {
-          fontFamily: "Courier New", fontSize: "22px", color: "#ffffff", fontWeight: "bold"
-        });
-
-        const t2 = this.add.text(listW - 26, 25, dateStr, {
-          fontFamily: "Courier New", fontSize: "22px", color: "#bbbbbb"
-        }).setOrigin(1, 0);
-
-        const t3 = this.add.text(26, 75, isWin ? "VICTORY" : "DEFEAT", {
-          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor, letterSpacing: 2
-        });
-
-        const t4 = this.add.text(listW / 2, 75, `Pot: ${match.pot || 0} | Inv: ${match.invested || 0}`, {
-          fontFamily: "Courier New", fontSize: "24px", color: "#ffcc00", fontWeight: "bold"
-        }).setOrigin(0.5, 0);
-
-        const t5 = this.add.text(listW - 26, 75, `${isWin ? "+" : "-"}${Math.abs(match.netChange || 0)}`, {
-          fontFamily: '"Anton", Impact, "sans-serif-black", sans-serif', fontSize: "32px", color: textColor
-        }).setOrigin(1, 0);
-
-        rowContainer.add([row, t1, t2, t3, t4, t5]);
-        content.add(rowContainer);
-        currentY += rowH + rowGap;
-      });
+    // Prevent scroll/touch gestures inside the list from bubbling to Phaser canvas
+    if (listBody) {
+      const stopBubble = e => e.stopPropagation();
+      listBody.addEventListener("wheel", stopBubble, { passive: true });
+      listBody.addEventListener("touchstart", stopBubble, { passive: true });
+      listBody.addEventListener("touchmove", stopBubble, { passive: true });
+      listBody.addEventListener("pointerdown", stopBubble);
     }
 
-    const contentHeight = Math.max(0, currentY - rowGap);
-
-    const updateVisibility = () => {
-      content.iterate(child => {
-        const rowTop = content.y + child.y;
-        const rowBottom = rowTop + rowH;
-        child.visible = rowBottom > viewportY && rowTop < viewportY + listH;
-      });
-    };
-
-    const minScroll = Math.min(0, listH - contentHeight);
-    const maxScroll = 0;
-
-    content.y = viewportY + Phaser.Math.Clamp(restoreScrollY, minScroll, maxScroll);
-    updateVisibility();
-
-    const scrollArea = this.add.rectangle(0, listY + listH / 2, listW, listH, 0xffffff, 0).setInteractive();
-    mainContainer.add(scrollArea);
-
-    let dragging = false;
-    let dragStartY = 0;
-    let startY = 0;
-
-    const onDown = pointer => { dragging = true; dragStartY = pointer.y; startY = content.y; };
-    const onMove = pointer => {
-      if (!dragging) return;
-      const delta = pointer.y - dragStartY;
-      content.y = Phaser.Math.Clamp(startY + delta, viewportY + minScroll, viewportY);
-      updateVisibility();
-    };
-    const onUp = () => { dragging = false; };
-    const onWheel = (pointer, dx, dy) => {
-      content.y = Phaser.Math.Clamp(content.y - dy, viewportY + minScroll, viewportY);
-      updateVisibility();
-    };
-
-    scrollArea.on("pointerdown", onDown);
-    scrollArea.on("wheel", onWheel);
-    this.input.on("pointermove", onMove);
-    this.input.on("pointerup", onUp);
-    this.input.on("pointerupoutside", onUp);
+    const timers = [];
+    timers.push(
+      setTimeout(() => {
+        if (!wrapper || !contentEl) return;
+        wrapper.style.transform = "translate3d(0, 0, 0)";
+        timers.push(
+          setTimeout(() => {
+            wrapper.style.width = "1150px";
+          }, 260)
+        );
+        timers.push(
+          setTimeout(() => {
+            contentEl.style.opacity = "1";
+          }, 520)
+        );
+      }, 30)
+    );
 
     const onShutdown = () => {
       if (this.closeSettingsDialog) this.closeSettingsDialog(true);
     };
     this.events.once("shutdown", onShutdown);
 
-    const fadeTargets = [...contents, content];
-    this.settingsDialog = { container: mainContainer, content, contents: fadeTargets, dim, baseY: viewportY, isClosing: false };
+    this.settingsDialog = { dialogDOM, dim, listBody, isClosing: false };
 
     this.closeSettingsDialog = (skipAnim = false) => {
       if (!this.settingsDialog || (this.settingsDialog.isClosing && !skipAnim)) return;
       this.settingsDialog.isClosing = true;
 
-      if (this.sndClickClose && !skipAnim) this.sndClickClose.play();
+      timers.forEach(t => clearTimeout(t));
+      timers.length = 0;
 
-      this.input.off("pointermove", onMove);
-      this.input.off("pointerup", onUp);
-      this.input.off("pointerupoutside", onUp);
+      if (this.sndClickClose && !skipAnim) this.sndClickClose.play();
       this.events.off("shutdown", onShutdown);
 
-      this.playBtn?.setInteractive({ useHandCursor: true });
-      this.joinBtn?.setInteractive({ useHandCursor: true });
-      this.settingsBtn?.setInteractive({ useHandCursor: true });
-
       const doCleanup = () => {
-        if (content) {
-          content.clearMask(true);
-          content.destroy();
-        }
-        if (maskShape) maskShape.destroy();
-        if (mainContainer) mainContainer.destroy();
+        if (dialogDOM) dialogDOM.destroy();
         if (dim) dim.destroy();
         this.settingsDialog = null;
         this.closeSettingsDialog = null;
+        if (this.scene && this.scene.isActive()) {
+          this.playBtn?.setInteractive({ useHandCursor: true });
+          this.joinBtn?.setInteractive({ useHandCursor: true });
+          this.settingsBtn?.setInteractive({ useHandCursor: true });
+        }
       };
 
       if (skipAnim) {
         doCleanup();
-      } else {
-        this.triggerExitAnimation(this.settingsDialog, doCleanup);
+        return;
       }
+
+      if (contentEl) contentEl.style.opacity = "0";
+      setTimeout(() => {
+        if (wrapper) wrapper.style.width = "4px";
+      }, 150);
+      setTimeout(() => {
+        if (wrapper) wrapper.style.transform = "translate3d(0, 100vh, 0)";
+        if (this.scene && this.scene.isActive()) {
+          this.tweens.add({
+            targets: dim,
+            fillAlpha: 0,
+            duration: 280,
+            ease: "Linear",
+            onComplete: doCleanup
+          });
+        } else {
+          doCleanup();
+        }
+      }, 420);
     };
 
-    closeBtn.on("pointerdown", () => this.closeSettingsDialog());
-
-    dim.on("pointerdown", pointer => pointer.event.stopPropagation());
-    dim.on("pointerup", pointer => pointer.event.stopPropagation());
-
-    if (!skipEntrance) {
-      this.animateEntrance(mainContainer, fadeTargets, dim);
-    }
+    dialogDOM.addListener("click");
+    dialogDOM.on("click", event => {
+      if (event.target && event.target.id === "historyCloseBtn") {
+        event.target.disabled = true;
+        this.closeSettingsDialog(false);
+      }
+    });
   }
 
   // ==========================================
