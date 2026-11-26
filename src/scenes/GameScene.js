@@ -84,8 +84,10 @@ export default class GameScene extends Phaser.Scene {
       data.minRaiseIncrement ?? (this.table ? this.table.minRaiseIncrement : this.smallBlind);
     this.maxPot = data.maxPot ?? (this.table ? this.table.maxPot : 0);
     this.bootWallet = data.bootWallet ?? (this.table ? this.table.bootWallet : this.bigBlind * 10);
-    this.bootWalletMax = data.bootWalletMax ?? (this.table ? this.table.bootWalletMax : this.maxPot);
+    this.bootWalletMax = data.bootWalletMax ?? (this.table ? this.table.bootWalletMax : this.bootWallet);
     this.topUpModal = null;
+    this._autoTopUpPrompted = false;
+    this._lastWaitingSeconds = 0;
     this.pot = data.pot ?? (this.table ? this.table.pot : this.smallBlind + this.bigBlind);
     this.currentPhase = data.phase || (this.table ? this.table.phase : "preflop");
 
@@ -350,6 +352,7 @@ export default class GameScene extends Phaser.Scene {
     session.socket.on("match_found", payload => {
       this.hideWaitingOverlay();
       this.hideTopUpModal();
+      this._autoTopUpPrompted = false;
       if (payload.bootWallet !== undefined) this.bootWallet = payload.bootWallet;
       if (payload.bootWalletMax !== undefined) this.bootWalletMax = payload.bootWalletMax;
       this.resetTable();
@@ -512,6 +515,7 @@ export default class GameScene extends Phaser.Scene {
     session.socket.on("round_finished", payload => {
       if (payload.sessionId !== this.sessionId) return;
       this.roundFinished = true;
+      this._autoTopUpPrompted = false;
       this.remainingTime = 0;
       this.isRaising = false;
       this.currentPhase = "showdown";
@@ -563,12 +567,12 @@ export default class GameScene extends Phaser.Scene {
     session.socket.off("balance_synced");
     session.socket.on("balance_synced", payload => {
       if (payload.sessionId && payload.sessionId !== this.sessionId) return;
+      if (payload.walletCoins !== undefined) {
+        this.userData.coins = payload.walletCoins;
+      }
       const mePlayer = this.players.find(p => p.username.toLowerCase() === this.username);
       if (mePlayer) {
         mePlayer.coins = payload.coins;
-        if (payload.walletCoins !== undefined) {
-          this.userData.coins = payload.walletCoins;
-        }
         this.updatePlayerCoinsUI();
         this.updateTurnUI();
       }
@@ -609,10 +613,31 @@ export default class GameScene extends Phaser.Scene {
       if (payload.maxPot) this.maxPot = payload.maxPot;
       if (payload.bootWallet !== undefined) this.bootWallet = payload.bootWallet;
       if (payload.bootWalletMax !== undefined) this.bootWalletMax = payload.bootWalletMax;
+      this._lastWaitingSeconds = Number(payload.waitingSeconds || 0);
       this.players = payload.seatedPlayers || [];
       this.resetTable();
       this.buildPlayersAndSeats();
       this.showWaitingOverlay(payload);
+
+      // Update live countdown badge if Top-Up modal is already open
+      if (this.topUpModal && this.topUpModal.timerEl) {
+        this.topUpModal.timerEl.textContent = `NEXT MATCH IN: ${this._lastWaitingSeconds}s`;
+      }
+
+      // Auto-open mandatory Top-Up dialog once if player's table stack is below boot_wallet
+      const me = this.players.find(p => p.username.toLowerCase() === this.username);
+      const currentStack = me ? Math.max(0, Number(me.coins || 0)) : 0;
+      const minRequired = Math.max(0, Number(this.bootWallet || 0));
+      const walletCoins = Math.max(0, Number(this.userData.coins || 0));
+      if (
+        !this._autoTopUpPrompted &&
+        !this.topUpModal &&
+        currentStack < minRequired &&
+        walletCoins >= minRequired
+      ) {
+        this._autoTopUpPrompted = true;
+        this.showTopUpModal(true);
+      }
     });
 
     session.socket.off("private_room_update");
@@ -640,6 +665,8 @@ export default class GameScene extends Phaser.Scene {
 
     session.socket.off("room_dismissed");
     session.socket.on("room_dismissed", payload => {
+      this.hideTopUpModal();
+      this.hideWaitingOverlay();
       AlertManager.show(
         this,
         "Room Dismissed",
@@ -653,6 +680,8 @@ export default class GameScene extends Phaser.Scene {
 
     session.socket.off("force_exit_low_balance");
     session.socket.on("force_exit_low_balance", payload => {
+      this.hideTopUpModal();
+      this.hideWaitingOverlay();
       AlertManager.show(
         this,
         "LOW BALANCE",
@@ -670,6 +699,8 @@ export default class GameScene extends Phaser.Scene {
 
     session.socket.off("rejoin_error");
     session.socket.on("rejoin_error", () => {
+      this.hideTopUpModal();
+      this.hideWaitingOverlay();
       AlertManager.show(
         this,
         "MATCH ENDED",
@@ -688,6 +719,7 @@ export default class GameScene extends Phaser.Scene {
     });
 
     this.events.once("shutdown", () => {
+      this.hideTopUpModal();
       document.removeEventListener("visibilitychange", this.visibilityHandler);
       session.cleanupGameListeners();
     });
@@ -714,7 +746,7 @@ export default class GameScene extends Phaser.Scene {
     // 2. Pre-baked Multi-Layered Luxury Beveled Body (Normal, Hover, Pressed textures)
     const makeBtnStateTex = (isHovered, isPressed) => {
       const key = `btn_bg_${width}_${height}_${fillHex}_${strokeHex}_${isHovered ? 1 : 0}_${isPressed ? 1 : 0}`;
-      return this.bakeGraphicsTexture(key, texW, texH, ( bg, cx, cy ) => {
+      return this.bakeGraphicsTexture(key, texW, texH, (bg, cx, cy) => {
         // Drop shadow
         bg.fillStyle(0x000000, 0.65);
         bg.fillRoundedRect(cx - width / 2, cy - height / 2 + 5, width, height, 16);
@@ -1970,6 +2002,7 @@ export default class GameScene extends Phaser.Scene {
         if (xBtn) xBtn.disabled = true;
 
         executeExitAnimation(() => {
+          this.hideTopUpModal();
           this.time.removeAllEvents();
           this.tweens.killAll();
           session.cleanupGameListeners();
@@ -2140,7 +2173,7 @@ export default class GameScene extends Phaser.Scene {
     }, 550);
   }
 
-showWaitingOverlay(payload) {
+  showWaitingOverlay(payload) {
     const w = this.scale.width;
     const h = this.scale.height;
 
@@ -2217,7 +2250,10 @@ showWaitingOverlay(payload) {
       const topUpZone = this.add.zone(0, 0, 290, 48).setOrigin(0.5).setInteractive({ useHandCursor: true });
       topUpZone.on("pointerdown", () => {
         if (this.sndClick) this.sndClick.play();
-        this.showTopUpModal();
+        const meNow = this.players.find(p => p.username.toLowerCase() === this.username);
+        const curStack = meNow ? Math.max(0, Number(meNow.coins || 0)) : 0;
+        const isMandatory = curStack < Number(this.bootWallet || 0);
+        this.showTopUpModal(isMandatory);
       });
       topUpCont.add([topUpBg, topUpTxt, topUpZone]);
 
@@ -2264,13 +2300,13 @@ showWaitingOverlay(payload) {
     }
   }
 
-  showTopUpModal() {
+  showTopUpModal(isMandatory = false) {
     this.hideTopUpModal();
     const me = this.players.find(p => p.username.toLowerCase() === this.username);
     const currentStack = me ? Math.max(0, Number(me.coins || 0)) : 0;
     const walletCoins = Math.max(0, Number(this.userData.coins || 0));
     const minCfg = Math.max(0, Number(this.bootWallet || 0));
-    const maxCfg = Math.max(minCfg, Number(this.bootWalletMax || minCfg));
+    const maxCfg = Math.max(minCfg, Number(this.bootWalletMax ?? minCfg));
     const maxTarget = Math.min(walletCoins, maxCfg);
     const minTarget = Math.min(maxTarget, Math.max(currentStack, minCfg));
 
@@ -2278,10 +2314,19 @@ showWaitingOverlay(payload) {
 
     const w = this.scale.width;
     const h = this.scale.height;
-    const step = maxTarget - minTarget >= 2000 ? 100 : maxTarget - minTarget >= 200 ? 50 : 10;
+    const range = Math.max(0, maxTarget - minTarget);
+    const step = range >= 2000 ? 100 : range >= 200 ? 50 : 10;
     let targetVal = maxTarget;
 
-    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.78).setDepth(9000).setInteractive();
+    const dim = this.add.rectangle(w / 2, h / 2, w, h, 0x000000, 0.82).setDepth(9000).setInteractive();
+
+    const warningBanner = isMandatory
+      ? `<div style="
+          background: rgba(255, 0, 51, 0.14); border: 1px solid #ff0033; border-radius: 10px;
+          padding: 8px 14px; margin-bottom: 14px; text-align: center;
+          font-family: 'Courier New', monospace; font-size: 14px; color: #ff5c77; font-weight: bold;
+        ">TABLE CHIPS BELOW MINIMUM (${minCfg.toLocaleString()}) — ADD CHIPS BEFORE TIMER ENDS OR RETURN TO LOBBY</div>`
+      : "";
 
     const html = `
       <style>
@@ -2294,18 +2339,27 @@ showWaitingOverlay(payload) {
           border-radius: 50%; background: #ffcc00; border: 4px solid #ffffff;
           box-shadow: 0 0 16px rgba(0, 255, 136, 0.9); cursor: pointer;
         }
+        #topUpSlider::-moz-range-thumb {
+          width: 32px; height: 32px; border-radius: 50%; background: #ffcc00;
+          border: 4px solid #ffffff; box-shadow: 0 0 16px rgba(0, 255, 136, 0.9); cursor: pointer;
+        }
       </style>
       <div style="
-        width: 640px; background: #050508; border: 3px solid #ffcc00; border-radius: 22px;
-        box-shadow: 0 0 38px rgba(0, 255, 136, 0.25); padding: 28px 34px; box-sizing: border-box;
+        width: 660px; background: #050508; border: 3px solid ${isMandatory ? "#ff0033" : "#ffcc00"}; border-radius: 22px;
+        box-shadow: 0 0 38px ${isMandatory ? "rgba(255, 0, 51, 0.35)" : "rgba(0, 255, 136, 0.25)"}; padding: 26px 34px; box-sizing: border-box;
         user-select: none; color: #ffffff;
       ">
-        <div style="text-align:center; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size: 36px; color: #00ff88; letter-spacing: 3px;">
-          TOP-UP TABLE BALANCE
+        <div style="text-align:center; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size: 36px; color: ${isMandatory ? "#ff0033" : "#00ff88"}; letter-spacing: 3px;">
+          ${isMandatory ? "TOP-UP REQUIRED" : "TOP-UP TABLE BALANCE"}
         </div>
-        <div style="text-align:center; margin: 6px 0 20px 0; font-family:'Courier New', monospace; font-size: 17px; color: #ffcc00; font-weight: bold;">
+        <div id="topUpTimerBadge" style="text-align:center; margin: 4px 0 6px 0; font-family:'Courier New', monospace; font-size: 16px; color: #ffffff; font-weight: bold;">
+          NEXT MATCH IN: ${this._lastWaitingSeconds}s
+        </div>
+        <div style="text-align:center; margin: 0 0 16px 0; font-family:'Courier New', monospace; font-size: 17px; color: #ffcc00; font-weight: bold;">
           CURRENT: ${currentStack.toLocaleString()} | WALLET: ${walletCoins.toLocaleString()}
         </div>
+
+        ${warningBanner}
 
         <div style="background:#101a14; border:2px solid #00ff88; border-radius:14px; padding:14px; text-align:center; margin-bottom:20px;">
           <div id="topUpAddBadge" style="font-family:'Courier New', monospace; font-size:16px; color:#5bffb0; font-weight:bold;">
@@ -2316,7 +2370,7 @@ showWaitingOverlay(payload) {
           </div>
         </div>
 
-        <input id="topUpSlider" type="range" min="${minTarget}" max="${maxTarget}" step="${step}" value="${targetVal}" />
+        <input id="topUpSlider" type="range" min="${minTarget}" max="${maxTarget}" step="1" value="${targetVal}" ${minTarget >= maxTarget ? "disabled" : ""} />
         <div style="display:flex; justify-content:space-between; font-family:'Courier New', monospace; font-size:15px; color:#bbbbbb; font-weight:bold; margin: 10px 0 22px 0;">
           <span>MIN: ${minTarget.toLocaleString()}</span>
           <span>MAX: ${maxTarget.toLocaleString()}</span>
@@ -2326,7 +2380,7 @@ showWaitingOverlay(payload) {
           <button id="topUpCancel" type="button" style="
             flex:1; height:52px; border-radius:12px; background:#29070d; border:2px solid #ff0033;
             color:#ff5c77; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size:22px; letter-spacing:2px; cursor:pointer;
-          ">CANCEL</button>
+          ">${isMandatory ? "LEAVE TABLE" : "CANCEL"}</button>
           <button id="topUpConfirm" type="button" style="
             flex:1.4; height:52px; border-radius:12px; background:#072b14; border:2px solid #00ff88;
             color:#5bffb0; font-family:'Anton', Impact, 'sans-serif-black', sans-serif; font-size:22px; letter-spacing:2px; cursor:pointer;
@@ -2339,9 +2393,14 @@ showWaitingOverlay(payload) {
     const slider = dom.getChildByID("topUpSlider");
     const targetText = dom.getChildByID("topUpTargetText");
     const addBadge = dom.getChildByID("topUpAddBadge");
+    const timerEl = dom.getChildByID("topUpTimerBadge");
 
-    const syncTopUp = nextVal => {
-      targetVal = Phaser.Math.Clamp(Math.round(nextVal), minTarget, maxTarget);
+    const syncTopUp = (nextVal, exact = false) => {
+      let val = Number(nextVal);
+      if (!exact && val < maxTarget && val > minTarget) {
+        val = Math.round(val / step) * step;
+      }
+      targetVal = Phaser.Math.Clamp(Math.round(val), minTarget, maxTarget);
       const pct = maxTarget <= minTarget ? 100 : ((targetVal - minTarget) / (maxTarget - minTarget)) * 100;
       if (slider) {
         slider.value = targetVal;
@@ -2350,17 +2409,28 @@ showWaitingOverlay(payload) {
       if (targetText) targetText.textContent = targetVal.toLocaleString();
       if (addBadge) addBadge.textContent = `ADDING: +${Math.max(0, targetVal - currentStack).toLocaleString()}`;
     };
-    syncTopUp(maxTarget);
+    syncTopUp(maxTarget, true);
 
     if (slider) {
-      slider.addEventListener("input", e => syncTopUp(Number(e.target.value)));
+      slider.addEventListener("input", e => syncTopUp(Number(e.target.value), false));
     }
 
     dom.addListener("click");
     dom.on("click", event => {
       if (event.target.id === "topUpCancel") {
         if (this.sndClickClose) this.sndClickClose.play();
-        this.hideTopUpModal();
+        if (isMandatory) {
+          this.hideTopUpModal();
+          this.time.removeAllEvents();
+          this.tweens.killAll();
+          session.cleanupGameListeners();
+          this.resetTable();
+          if (this.isPrivate) session.socket.emit("leave_private_room", { username: this.username, roomId: this.roomId });
+          else session.socket.emit("leave_city", { username: this.username, configId: this.configId, cityIndex: this.cityIndex });
+          this.scene.start("LobbyScene", { username: this.username, coins: this.userData.coins });
+        } else {
+          this.hideTopUpModal();
+        }
       } else if (event.target.id === "topUpConfirm") {
         if (this.sndClick) this.sndClick.play();
         event.target.disabled = true;
@@ -2373,7 +2443,7 @@ showWaitingOverlay(payload) {
       }
     });
 
-    this.topUpModal = { dim, dom };
+    this.topUpModal = { dim, dom, timerEl };
   }
 
   hideTopUpModal() {
