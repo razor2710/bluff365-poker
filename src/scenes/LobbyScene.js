@@ -477,6 +477,9 @@ export default class LobbyScene extends Phaser.Scene {
   // ==========================================
   // MATCH HISTORY DIALOG
   // ==========================================
+// ==========================================
+  // MATCH HISTORY DIALOG
+  // ==========================================
   showSettingsDialog(restoreScrollY = 0, skipEntrance = false) {
     if (this.settingsDialog) return;
     this.playBtn?.disableInteractive();
@@ -519,18 +522,23 @@ export default class LobbyScene extends Phaser.Scene {
     closeBtn.on("pointerout", () => closeBtn.setScale(1));
     contents.push(closeBtn);
 
+    mainContainer.add(contents);
+
     const listX = -panelW / 2 + 25;
     const listY = -panelH / 2 + 130;
     const listW = panelW - 50;
     const listH = panelH - 170;
 
-    const content = this.add.container(listX, listY);
-    contents.push(content);
+    // World coordinates of the clip viewport (below "MATCH HISTORY" and above panel bottom)
+    const viewportX = w / 2 + listX;
+    const viewportY = h / 2 + listY;
 
-    // Clip mask strictly inside the dialog's list viewport
+    // Keep scrollable content on the scene root (NOT inside mainContainer) so Phaser applies the GeometryMask
+    const content = this.add.container(viewportX, viewportY).setDepth(4002);
+
     const maskShape = this.make.graphics({ x: 0, y: 0, add: false });
     maskShape.fillStyle(0xffffff);
-    maskShape.fillRect(w / 2 + listX, h / 2 + listY, listW, listH);
+    maskShape.fillRect(viewportX, viewportY, listW, listH);
     const listMask = maskShape.createGeometryMask();
     content.setMask(listMask);
 
@@ -551,7 +559,6 @@ export default class LobbyScene extends Phaser.Scene {
         const strokeColor = isWin ? 0x00ff88 : 0xff0033;
         const textColor = isWin ? "#00ff88" : "#ff0033";
 
-        // Group each row in its own container positioned at y so culling & clipping work cleanly
         const rowContainer = this.add.container(0, y);
 
         const row = this.add.graphics();
@@ -589,22 +596,20 @@ export default class LobbyScene extends Phaser.Scene {
       });
     }
 
-    mainContainer.add(contents);
-
-    const contentHeight = currentY;
+    const contentHeight = Math.max(0, currentY - rowGap);
 
     const updateVisibility = () => {
       content.iterate(child => {
         const rowTop = content.y + child.y;
         const rowBottom = rowTop + rowH;
-        child.visible = rowBottom > listY && rowTop < listY + listH;
+        child.visible = rowBottom > viewportY && rowTop < viewportY + listH;
       });
     };
 
     const minScroll = Math.min(0, listH - contentHeight);
     const maxScroll = 0;
 
-    content.y = listY + Phaser.Math.Clamp(restoreScrollY, minScroll, maxScroll);
+    content.y = viewportY + Phaser.Math.Clamp(restoreScrollY, minScroll, maxScroll);
     updateVisibility();
 
     const scrollArea = this.add.rectangle(0, listY + listH / 2, listW, listH, 0xffffff, 0).setInteractive();
@@ -618,12 +623,12 @@ export default class LobbyScene extends Phaser.Scene {
     const onMove = pointer => {
       if (!dragging) return;
       const delta = pointer.y - dragStartY;
-      content.y = Phaser.Math.Clamp(startY + delta, listY + minScroll, listY);
+      content.y = Phaser.Math.Clamp(startY + delta, viewportY + minScroll, viewportY);
       updateVisibility();
     };
     const onUp = () => { dragging = false; };
     const onWheel = (pointer, dx, dy) => {
-      content.y = Phaser.Math.Clamp(content.y - dy, listY + minScroll, listY);
+      content.y = Phaser.Math.Clamp(content.y - dy, viewportY + minScroll, viewportY);
       updateVisibility();
     };
 
@@ -631,13 +636,15 @@ export default class LobbyScene extends Phaser.Scene {
     scrollArea.on("wheel", onWheel);
     this.input.on("pointermove", onMove);
     this.input.on("pointerup", onUp);
+    this.input.on("pointerupoutside", onUp);
 
     const onShutdown = () => {
       if (this.closeSettingsDialog) this.closeSettingsDialog(true);
     };
     this.events.once("shutdown", onShutdown);
 
-    this.settingsDialog = { container: mainContainer, content, contents, dim, baseY: listY, isClosing: false };
+    const fadeTargets = [...contents, content];
+    this.settingsDialog = { container: mainContainer, content, contents: fadeTargets, dim, baseY: viewportY, isClosing: false };
 
     this.closeSettingsDialog = (skipAnim = false) => {
       if (!this.settingsDialog || (this.settingsDialog.isClosing && !skipAnim)) return;
@@ -647,6 +654,7 @@ export default class LobbyScene extends Phaser.Scene {
 
       this.input.off("pointermove", onMove);
       this.input.off("pointerup", onUp);
+      this.input.off("pointerupoutside", onUp);
       this.events.off("shutdown", onShutdown);
 
       this.playBtn?.setInteractive({ useHandCursor: true });
@@ -654,7 +662,10 @@ export default class LobbyScene extends Phaser.Scene {
       this.settingsBtn?.setInteractive({ useHandCursor: true });
 
       const doCleanup = () => {
-        if (content) content.clearMask(true);
+        if (content) {
+          content.clearMask(true);
+          content.destroy();
+        }
         if (maskShape) maskShape.destroy();
         if (mainContainer) mainContainer.destroy();
         if (dim) dim.destroy();
@@ -675,7 +686,7 @@ export default class LobbyScene extends Phaser.Scene {
     dim.on("pointerup", pointer => pointer.event.stopPropagation());
 
     if (!skipEntrance) {
-      this.animateEntrance(mainContainer, contents, dim);
+      this.animateEntrance(mainContainer, fadeTargets, dim);
     }
   }
 
